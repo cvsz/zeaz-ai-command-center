@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Heuristic parser for common CLI ``--help`` output formats.
 
-The parser intentionally avoids provider-specific dependencies. It supports
-Clap, Commander, Click/Typer, argparse, Cobra, and many hand-written help
-layouts well enough to generate a useful command builder.
+The pareser is provider-agnostic and intentionally dependency-free. It targets
+Clap, Cobra, Commander, Click/Typer, argparse, docopt-like, Symfony Console,
+and similar hand-written help layouts. Parsed schemas always retain raw help so
+operators can audit and correct heuristic results.
 """
 
 from __future__ import annotations
@@ -11,22 +12,27 @@ from __future__ import annotations
 import re
 from typing import Any
 
-ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+PARSER_VERSION = "heuristic-v3"
+ANSI_RE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
 SECTION_RE = re.compile(
-    r"^\s*(usage|commands?|available commands?|subcommands?|options?|flags?|global options?|global flags?|arguments?|positionals?)\s*:\s*(.*)$",
-    re.IGNORECASE,
+    r"^\s*(usage|synopsis|commands?|available commands?|subcommands?|options?|flags?|global options?|global flags?|arguments?|positionals?|parameters?)\s*:?\s*(.*)$",
+    re.IGNORECASE,)
+FLAG_RE = re.compile(r"(?<![\w-])(-{1,2}[A-Za-z0-9?][A-Za-z0-9_.-]*|--\[no-\][A-Za-z0-9][A-Za-z0-9_.-]*)")
+VALUE_RE = re.compile(
+    r"(?:=|\s)(<[^>]+>|\[[^\]]+\]|\{[^}]+\}|[A-Z][A-Z0-9_.-]*)(?:\.\.\.)?"
 )
-OPTION_START_RE = re.compile(r"^\s{0,12}(?P<spec>(?:-{1,2}[\w?][\w.-]*(?:[ =](?:<[^>]+>|\[[^\]]+\]|[A-Z][A-Z0-9_.-]*))?)(?:\s*,?\s+-{1,2}[\w?][\w.-]*(?:[ =](?:<[^>]+>|\[[^\]]+\]|[A-Z][A-Z0-9_.-]*))?)*)\s{2,}(?P<desc>.*)$")
-OPTION_LOOSE_RE = re.compile(r"^\s*(?P<spec>-{1,2}[\w?][^\t]{0,120}?)(?:\t|\s{3,})(?P<desc>.*)$")
-FLAG_RE = re.compile(r"(?<![\w-])(-{1,2}[A-Za-z0-9?][A-Za-z0-9_.-]*)")
-VALUE_RE = re.compile(r"(?:=|\s)(<[^>]+>|\[[^\]]+\]|[A-Z][A-Z0-9_.-]*)(?:\.\.\.)?")
-CHOICES_INLINE_RE = re.compile(r"(?:possible|allowed|valid)\s+values?\s*:\s*([^\]\n.]+)", re.IGNORECASE)
-CHOICES_BRACKET_RE = re.compile(r"\[(?:possible|allowed|valid)\s+values?\s*:\s*([^\]]+)\]", re.IGNORECASE)
-ALIAS_RE = re.compile(r"\[aliases?\s*:\s*([^\]]+)\]", re.IGNORECASE)
+CHOICES_INLINE_RE = re.compile(r"(?:possible|allowed|valid|accepted)\s+values?\s*:\s*([^\]\n.)]+)", re.IGNORECASE)
+CHOICES_BRACKET_RE = re.compile(r"[\[(](?:possible|allowed|valid|accepted)\s+values?\s*:\s*([^\])]+)[\])]", re.IGNORECASE)
+CHOICES_BRACE_RE = re.compile(r"\{([^{}\n]*)\}")
+ALIAS_RE = re.compile(r"[\[(]aliases?\s*:\s*([^\])]+)[\])]", re.IGNORECASE)
+DEFAULT_RE = re.compile(r"[\[(](?:default|default value)\s*:\s*([^\])]+)[\])]", re.IGNORECASE)
+ENV_RE = re.compile(r"[\[(](?:env|environment)\s*:\s*([A-Za-z_][A-Za-z0-9_]*)(?:=[^\])]+)?[\])]", re.IGNORECASE)
+REQUIRED_RE = re.compile(r"\b(required|mandatory)\b", re.IGNORECASE)
+DEPRECATED_RE = re.compile(r"\b(deprecated|obsolete)\b", re.IGNORECASE)
 
 DANGEROUS_TERMS = {
     "danger", "dangerous", "bypass", "no-sandbox", "unsandboxed", "full-access",
-    "allow-all", "skip-confirm", "skip-approval", "disable-safety",
+    "allow-all", "skip-confirm", "skip-approval", "disable-safety", "without sandbox",
 }
 DESTRUCTIVE_TERMS = {
     "delete", "remove", "logout", "uninstall", "reset", "purge", "destroy",
@@ -36,7 +42,7 @@ DESTRUCTIVE_TERMS = {
 
 def clean_help_text(text: str) -> str:
     text = ANSI_RE.sub("", text or "")
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\x08", "")
     return "\n".join(line.rstrip() for line in text.splitlines()).strip()
 
 
@@ -44,11 +50,11 @@ def _section_name(raw: str) -> str:
     name = raw.lower().strip()
     if "command" in name:
         return "commands"
-    if "option" in name or "flag" in name:
+    if "option" in name or "flag" in name or "parameter" in name:
         return "options"
     if "argument" in name or "position" in name:
         return "arguments"
-    if name == "usage":
+    if name in {"usage", "synopsis"}:
         return "usage"
     return name
 
@@ -57,7 +63,7 @@ def _split_choices(raw: str) -> list[str]:
     values = re.split(r"\s*[,|/]\s*|\s{2,}", raw.strip())
     cleaned: list[str] = []
     for value in values:
-        item = value.strip().strip("`'\"[]")
+        item = value.strip().strip("`'\"[]{}()")
         if item and item.lower() not in {"etc", "etc."} and item not in cleaned:
             cleaned.append(item)
     return cleaned[:64]
@@ -72,24 +78,54 @@ def _risk(text: str) -> str:
     return "normal"
 
 
-def _parse_option(spec: str, description: str) -> dict[str, Any]:
+def _split_entry(line: str) -> tuple[str, str]:
+    """Split an indented help row into its spec and description columns."""
+    stripped = line.strip()
+    parts = re.split(r"\s{2,}|\t+", stripped, maxsplit=1)
+    return parts[0], parts[1].strip() if len(parts) > 1 else ""
+
+
+def _extract_value(spec: str) -> tuple[bool, str, list[str]]:
+    value_match = VALUE_RE.search(spec)
+    if not value_match:
+        return False, "", []
+    raw = value_match.group(1)
+    value_name = raw.strip("<>[]{}").removesuffix("...")
+    choices: list[str] = []
+    if raw.startswith("{"):
+        choices = _split_choices(raw.strip("{}"))
+    return True, value_name, choices
+
+
+def _parse_option(spec: str, description: str, *, scope: str = "local") -> dict[str, Any]:
     flags = FLAG_RE.findall(spec)
     if not flags:
         raise ValueError("Option has no flag")
-    preferred = next((flag for flag in flags if flag.startswith("--")), flags[0])
-    value_match = VALUE_RE.search(spec)
-    value_name = ""
-    if value_match:
-        value_name = value_match.group(1).strip("<>[]")
-    takes_value = bool(value_match)
-    multi_value = "..." in spec or "multiple" in description.lower()
-    repeatable = multi_value or "repeatable" in description.lower() or "may be specified multiple" in description.lower()
+    expanded_flags: list[str] = []
+    for flag in flags:
+        if flag.startswith("--[no-]"):
+            base = flag.removeprefix("--[no-]")
+            expanded_flags.extend([f"--{base}", f"--no-{base}"])
+        else:
+            expanded_flags.append(flag)
+    flags = list(dict.fromkeys(expanded_flags))
+    preferred = next((flag for flag in flags if flag.startswith("--") and not flag.startswith("--no-")), flags[0])
+    takes_value, value_name, spec_choices = _extract_value(spec)
+    lower_description = description.lower()
+    multi_value = "..." in spec or "multiple values" in lower_description or "one or more" in lower_description
+    repeatable = multi_value or "repeatable" in lower_description or "may be specified multiple" in lower_description or "can be used multiple" in lower_description
 
-    choices: list[str] = []
+    choices = spec_choices
     match = CHOICES_BRACKET_RE.search(description) or CHOICES_INLINE_RE.search(description)
     if match:
         choices = _split_choices(match.group(1))
+    elif not choices:
+        brace_match = CHOICES_BRACE_RE.search(spec)
+        if brace_match and any(delimiter in brace_match.group(1) for delimiter in (",", "|")):
+            choices = _split_choices(brace_match.group(1))
 
+    default_match = DEFAULT_RE.search(description)
+    env_match = ENV_RE.search(description)
     return {
         "id": preferred.lstrip("-").replace("-", "_"),
         "flags": flags,
@@ -101,33 +137,26 @@ def _parse_option(spec: str, description: str) -> dict[str, Any]:
         "choices": choices,
         "repeatable": repeatable,
         "multi_value": multi_value,
-        "required": "required" in description.lower(),
+        "required": bool(REQUIRED_RE.search(description)),
+        "default": default_match.group(1).strip().strip("`'\"") if default_match else None,
+        "environment": env_match.group(1) if env_match else None,
+        "negatable": any(flag.startswith("--no-") for flag in flags),
+        "deprecated": bool(DEPRECATED_RE.search(description)),
+        "scope": scope,
         "risk": _risk(f"{spec} {description}"),
     }
 
 
-def _split_entry(line: str) -> tuple[str, str]:
-    """Split an indented help row into its spec and description columns."""
-    stripped = line.strip()
-    parts = re.split(r"\s{2,}|\t+", stripped, maxsplit=1)
-    return parts[0], parts[1].strip() if len(parts) > 1 else ""
-
-
-def _parse_option_line(line: str) -> dict[str, Any] | None:
+def _parse_option_line(line: str, *, scope: str = "local") -> dict[str, Any] | None:
     stripped = line.strip()
     if not stripped.startswith("-"):
         return None
     spec, description = _split_entry(line)
-    # A spec can contain a short flag, a long flag, and a value placeholder.
-    # If column splitting stopped too early, preserve comma-separated aliases.
-    if spec.endswith(",") and description.startswith("--"):
+    if spec.endswith(",") and description.startswith("-"):
         second_parts = re.split(r"\s{2,}|\t+", description, maxsplit=1)
         spec = f"{spec} {second_parts[0]}"
         description = second_parts[1].strip() if len(second_parts) > 1 else ""
     if not description:
-        # Some tools separate the option spec and prose with only one space.
-        # Locate the final value placeholder (or final flag for booleans) and
-        # treat the remainder as the description column.
         value_match = VALUE_RE.search(stripped)
         flag_matches = list(FLAG_RE.finditer(stripped))
         boundary = value_match.end() if value_match else (flag_matches[-1].end() if flag_matches else 0)
@@ -135,9 +164,21 @@ def _parse_option_line(line: str) -> dict[str, Any] | None:
         if boundary and remainder:
             spec, description = stripped[:boundary].rstrip(), remainder
     try:
-        return _parse_option(spec, description)
+        return _parse_option(spec, description, scope=scope)
     except ValueError:
         return None
+
+
+def _command_arguments(spec: str) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for raw in re.findall(r"<[^>]+>|\[[^\]]+\]|\{[^}]+\}", spec):
+        inner = raw.strip("<>[]{}").strip()
+        if not inner or inner.upper() in {"OPTIONS", "ARGS", "COMMAND"}:
+            continue
+        repeatable = inner.endswith("...")
+        name = inner.removesuffix("...")
+        result.append({"name": name, "spec": raw, "required": raw.startswith("<"), "repeatable": repeatable})
+    return result
 
 
 def _parse_command(line: str) -> dict[str, Any] | None:
@@ -159,6 +200,8 @@ def _parse_command(line: str) -> dict[str, Any] | None:
         "spec": spec,
         "description": description,
         "aliases": aliases,
+        "arguments": _command_arguments(spec),
+        "deprecated": bool(DEPRECATED_RE.search(description)),
         "risk": _risk(f"{name} {description}"),
     }
 
@@ -168,15 +211,35 @@ def _parse_argument_line(line: str) -> dict[str, Any] | None:
     if not stripped:
         return None
     spec, description = _split_entry(line)
-    if not re.fullmatch(r"(?:<[^>]+>|\[[^\]]+\]|[A-Z][A-Z0-9_.-]*)(?:\.\.\.)?", spec):
+    if not re.fullmatch(r"(?:<[^>]+>|\[[^\]]+\]|\{[^}]+\}|[A-Z][A-Z0-9_.-]*)(?:\.\.\.)?", spec):
         return None
+    raw_name = spec.strip("<>[]{}").removesuffix("...")
+    choices = _split_choices(raw_name) if spec.startswith("{") else []
     return {
-        "name": spec.strip("<>[]").removesuffix("..."),
+        "name": raw_name if not choices else "value",
         "spec": spec,
         "description": description,
         "required": spec.startswith("<"),
         "repeatable": "..." in spec,
+        "choices": choices,
+        "deprecated": bool(DEPRECATED_RE.search(description)),
     }
+
+
+def _refresh_option_metadata(option: dict[str, Any]) -> None:
+    description = option["description"]
+    match = CHOICES_BRACKET_RE.search(description) or CHOICES_INLINE_RE.search(description)
+    if match:
+        option["choices"] = _split_choices(match.group(1))
+    default_match = DEFAULT_RE.search(description)
+    env_match = ENV_RE.search(description)
+    if default_match:
+        option["default"] = default_match.group(1).strip().strip("`'\"")
+    if env_match:
+        option["environment"] = env_match.group(1)
+    option["required"] = option["required"] or bool(REQUIRED_RE.search(description))
+    option["deprecated"] = option["deprecated"] or bool(DEPRECATED_RE.search(description))
+    option["risk"] = _risk(option["spec"] + " " + description)
 
 
 def parse_help(text: str, *, executable: str = "", command_path: list[str] | None = None) -> dict[str, Any]:
@@ -193,6 +256,7 @@ def parse_help(text: str, *, executable: str = "", command_path: list[str] | Non
     sections_seen: list[str] = []
 
     section = "description"
+    option_scope = "local"
     current_option: dict[str, Any] | None = None
     current_command: dict[str, Any] | None = None
     current_argument: dict[str, Any] | None = None
@@ -200,8 +264,10 @@ def parse_help(text: str, *, executable: str = "", command_path: list[str] | Non
     for index, line in enumerate(lines):
         section_match = SECTION_RE.match(line)
         if section_match:
-            section = _section_name(section_match.group(1))
-            sections_seen.append(section)
+            raw_section = section_match.group(1)
+            section = _section_name(raw_section)
+            option_scope = "global" if raw_section.lower().startswith("global") else "local"
+            sections_seen.append("global_options" if section == "options" and option_scope == "global" else section)
             trailing = section_match.group(2).strip()
             current_option = current_command = current_argument = None
             if section == "usage" and trailing:
@@ -229,21 +295,19 @@ def parse_help(text: str, *, executable: str = "", command_path: list[str] | Non
                 continue
             if current_command and line.startswith(("      ", "\t")):
                 current_command["description"] += " " + stripped
+                current_command["deprecated"] = current_command["deprecated"] or bool(DEPRECATED_RE.search(stripped))
                 current_command["risk"] = _risk(current_command["name"] + " " + current_command["description"])
                 continue
 
         if section == "options":
-            option = _parse_option_line(line)
+            option = _parse_option_line(line, scope=option_scope)
             if option:
                 options.append(option)
                 current_option = option
                 continue
             if current_option and line.startswith(("      ", "\t")):
                 current_option["description"] += " " + stripped
-                choice_match = CHOICES_BRACKET_RE.search(current_option["description"]) or CHOICES_INLINE_RE.search(current_option["description"])
-                if choice_match:
-                    current_option["choices"] = _split_choices(choice_match.group(1))
-                current_option["risk"] = _risk(current_option["spec"] + " " + current_option["description"])
+                _refresh_option_metadata(current_option)
                 continue
 
         if section == "arguments":
@@ -256,9 +320,8 @@ def parse_help(text: str, *, executable: str = "", command_path: list[str] | Non
                 current_argument["description"] += " " + stripped
                 continue
 
-        # Some CLIs omit section headers. Attempt conservative detection.
         if stripped.startswith("-"):
-            option = _parse_option_line(line)
+            option = _parse_option_line(line, scope=option_scope)
             if option and option["flag"] not in {item["flag"] for item in options}:
                 options.append(option)
                 current_option = option
@@ -267,25 +330,23 @@ def parse_help(text: str, *, executable: str = "", command_path: list[str] | Non
         if section == "description" and index > 0:
             description_lines.append(stripped)
 
-    # De-duplicate while preserving order.
     command_map: dict[str, dict[str, Any]] = {}
     for command in commands:
         command_map.setdefault(command["name"], command)
     option_map: dict[str, dict[str, Any]] = {}
     for option in options:
         option_map.setdefault(option["flag"], option)
+    argument_map: dict[str, dict[str, Any]] = {}
+    for argument in arguments:
+        argument_map.setdefault(argument["spec"], argument)
 
     usage = "\n".join(usage_lines).strip()
     description = " ".join(description_lines).strip()
     if description == title:
         description = ""
 
-    overall_risk = "normal"
     risks = [item["risk"] for item in command_map.values()] + [item["risk"] for item in option_map.values()]
-    if "dangerous" in risks:
-        overall_risk = "dangerous"
-    elif "destructive" in risks:
-        overall_risk = "destructive"
+    overall_risk = "dangerous" if "dangerous" in risks else "destructive" if "destructive" in risks else "normal"
 
     return {
         "title": title,
@@ -295,9 +356,9 @@ def parse_help(text: str, *, executable: str = "", command_path: list[str] | Non
         "command_path": command_path,
         "commands": list(command_map.values()),
         "options": list(option_map.values()),
-        "arguments": arguments,
+        "arguments": list(argument_map.values()),
         "sections": list(dict.fromkeys(sections_seen)),
         "risk": overall_risk,
         "raw_help": cleaned,
-        "parser": "heuristic-v2",
+        "parser": PARSER_VERSION,
     }
