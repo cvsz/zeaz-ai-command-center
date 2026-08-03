@@ -12,15 +12,17 @@ permissions:
 
 jobs:
   apply:
-    if: ${{ hashFiles('.upgrade/READY') != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Verify upgrade marker
+        run: test -f .upgrade/READY
       - name: Reconstruct source archive
         run: |
           cat .upgrade/source.tar.gz.b64.part-* | base64 --decode > /tmp/zeaz-ai-command-center-v2.1.tar.gz
+          echo "da0e372e288cf1b99c90030af3089d729f8ae13a1123d1c524ca44960dd01035  /tmp/zeaz-ai-command-center-v2.1.tar.gz" | sha256sum --check
           tar -tzf /tmp/zeaz-ai-command-center-v2.1.tar.gz >/dev/null
       - name: Apply source tree
         run: |
