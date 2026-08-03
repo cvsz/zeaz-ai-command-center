@@ -8,12 +8,11 @@ version = "2.1.0"
 requires-python = ">=3.10"
 description = "Secure provider-agnostic web command builder generated from AI CLI help output"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 authors = [{name = "ZEAZDEV"}]
 keywords = ["ai", "cli", "codex", "claude", "gemini", "ollama", "command-builder"]
 classifiers = [
   "Development Status :: 4 - Beta",
-  "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
