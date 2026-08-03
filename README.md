@@ -46,7 +46,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/THREAT-MODEL.md](docs
 - Python 3.10 or newer
 - SQLite 3.24 or newer through Python's `sqlite3`
 - One or more AI CLI executables available in `PATH`
-- Linux/macOS for process-group signaling; Ubuntu is the primary deployment target
+- Windows 11 / Linux / macOS (Ubuntu, macOS, Windows 11 fully supported)
 
 ## Install on Ubuntu
 

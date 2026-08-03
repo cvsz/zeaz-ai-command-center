@@ -215,7 +215,7 @@ def resolve_executable(executable: Any) -> str:
         if os.getenv("PANEL_ALLOW_ABSOLUTE_BINARIES", "0") != "1":
             raise ValueError("Absolute executable paths are disabled; set PANEL_ALLOW_ABSOLUTE_BINARIES=1 to enable")
         path = Path(raw).expanduser().resolve()
-        if not path.is_absolute() or not path.exists() or not path.is_file() or not os.access(path, os.X_OK):
+        if not path.is_absolute() or not path.exists() or not path.is_file() or (sys.platform != "win32" and not os.access(path, os.X_OK)):
             raise ValueError(f"Executable is not runnable: {path}")
         return str(path)
     if not BINARY_RE.fullmatch(raw):
@@ -309,16 +309,23 @@ class ProviderRegistry:
             Path.home() / "go" / "bin",
             Path("/usr/local/bin"),
             Path("/opt/homebrew/bin"),
+            Path.home() / "AppData" / "Local" / "Programs",
+            Path.home() / "AppData" / "Roaming" / "npm",
+            Path("C:/Program Files"),
+            Path("C:/Program Files (x86)"),
         ]
+        win_exts = ["", ".exe", ".cmd", ".bat", ".ps1"] if sys.platform == "win32" else [""]
         for candidate in DEFAULT_CANDIDATES:
             resolved = shutil.which(candidate["executable"])
             if not resolved:
                 for base_dir in os_paths:
                     if base_dir.exists():
-                        target = base_dir / candidate["executable"]
-                        if target.is_file() and os.access(target, os.X_OK):
-                            resolved = str(target.resolve())
-                            break
+                        for ext in win_exts:
+                            target = base_dir / f"{candidate['executable']}{ext}"
+                            if target.is_file() and (sys.platform == "win32" or os.access(target, os.X_OK)):
+                                resolved = str(target.resolve())
+                                break
+                        if resolved: break
             if resolved or include_missing:
                 providers[candidate["id"]] = {
                     **candidate,
