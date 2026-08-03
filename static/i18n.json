@@ -1,0 +1,37 @@
+{
+  "en": {
+    "select_provider": "Choose an AI CLI provider",
+    "rescan_clis": "Rescan installed CLIs",
+    "run_command": "Run command",
+    "save_preset": "Save preset",
+    "export_schema": "Export schema"
+  },
+  "es": {
+    "select_provider": "Elija un proveedor de CLI de IA",
+    "rescan_clis": "Reescanear CLIs instalados",
+    "run_command": "Ejecutar comando",
+    "save_preset": "Guardar plantilla",
+    "export_schema": "Exportar esquema"
+  },
+  "fr": {
+    "select_provider": "Choisissez un fournisseur CLI IA",
+    "rescan_clis": "Analyser à nouveau les CLI",
+    "run_command": "Exécuter la commande",
+    "save_preset": "Enregistrer le modèle",
+    "export_schema": "Exporter le schéma"
+  },
+  "de": {
+    "select_provider": "Wählen Sie einen KI-CLI-Anbieter",
+    "rescan_clis": "Installierte CLIs scannen",
+    "run_command": "Befehl ausführen",
+    "save_preset": "Vorlage speichern",
+    "export_schema": "Schema exportieren"
+  },
+  "zh": {
+    "select_provider": "选择 AI CLI 提供商",
+    "rescan_clis": "重新扫描已安装的 CLI",
+    "run_command": "运行命令",
+    "save_preset": "保存预设",
+    "export_schema": "导出架构"
+  }
+}

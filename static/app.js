@@ -104,9 +104,23 @@ function bindEvents() {
   $("createPrBtn").addEventListener("click", createPullRequest);
   $("probeButton").addEventListener("click", () => inspectProvider(false));
   $("saveProvider").addEventListener("click", () => inspectProvider(true));
+  $("langSelect").addEventListener("change", (e) => applyI18n(e.target.value));
   ["cwd", "positionals", "prompt", "rawArgs", "environment", "confirmation", "timeoutSeconds"].forEach(id => {
     $(id).addEventListener("input", updatePreview);
   });
+}
+
+async function applyI18n(lang) {
+  try {
+    const res = await fetch("/i18n.json");
+    const dict = await res.json();
+    const translations = dict[lang] || dict.en;
+    if (translations.select_provider && !state.provider) $("pageTitle").textContent = translations.select_provider;
+    if (translations.rescan_clis) $("refreshProviders").textContent = translations.rescan_clis;
+    if (translations.run_command) $("runButton").textContent = translations.run_command;
+    if (translations.save_preset) $("savePresetBtn").textContent = translations.save_preset;
+    if (translations.export_schema) $("exportSchema").textContent = translations.export_schema;
+  } catch (err) { console.error(err); }
 }
 
 async function loadProviders() {
