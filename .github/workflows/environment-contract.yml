@@ -1,0 +1,127 @@
+name: Environment Contract
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: GitHub Environment to validate
+        required: true
+        type: choice
+        default: development
+        options:
+          - development
+          - staging
+          - production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: environment-contract-${{ inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate ${{ inputs.target }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.target }}
+      deployment: false
+    env:
+      PANEL_HOST: ${{ vars.PANEL_HOST }}
+      PANEL_PORT: ${{ vars.PANEL_PORT }}
+      PANEL_ALLOWED_HOSTS: ${{ vars.PANEL_ALLOWED_HOSTS }}
+      PANEL_ALLOWED_ROOTS: ${{ vars.PANEL_ALLOWED_ROOTS }}
+      PANEL_ENABLE_HSTS: ${{ vars.PANEL_ENABLE_HSTS }}
+      PANEL_LOG_LEVEL: ${{ vars.PANEL_LOG_LEVEL }}
+      PANEL_LOG_FORMAT: ${{ vars.PANEL_LOG_FORMAT }}
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      PANEL_TOKEN: ${{ secrets.PANEL_TOKEN }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+    steps:
+      - name: Validate environment configuration
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          import sys
+
+          errors = []
+
+          required_variables = (
+              "PANEL_HOST",
+              "PANEL_PORT",
+              "PANEL_ALLOWED_HOSTS",
+          )
+          for name in required_variables:
+              if not os.getenv(name, "").strip():
+                  errors.append(f"missing environment variable: {name}")
+
+          port_raw = os.getenv("PANEL_PORT", "").strip()
+          if port_raw:
+              try:
+                  port = int(port_raw)
+                  if not 1 <= port <= 65535:
+                      raise ValueError
+              except ValueError:
+                  errors.append("PANEL_PORT must be an integer from 1 to 65535")
+
+          deploy_port_raw = os.getenv("DEPLOY_PORT", "").strip()
+          if deploy_port_raw:
+              try:
+                  deploy_port = int(deploy_port_raw)
+                  if not 1 <= deploy_port <= 65535:
+                      raise ValueError
+              except ValueError:
+                  errors.append("DEPLOY_PORT must be an integer from 1 to 65535")
+
+          host = os.getenv("PANEL_HOST", "").strip().lower()
+          allowed_hosts = {
+              item.strip().lower()
+              for item in os.getenv("PANEL_ALLOWED_HOSTS", "").split(",")
+              if item.strip()
+          }
+          loopback_hosts = {"127.0.0.1", "::1", "localhost"}
+
+          if host in {"0.0.0.0", "::"} and not allowed_hosts:
+              errors.append("PANEL_ALLOWED_HOSTS is required for wildcard binding")
+
+          if host not in loopback_hosts and not os.getenv("PANEL_TOKEN", ""):
+              errors.append("PANEL_TOKEN secret is required for non-loopback binding")
+
+          hsts = os.getenv("PANEL_ENABLE_HSTS", "").strip()
+          if hsts and hsts not in {"0", "1"}:
+              errors.append("PANEL_ENABLE_HSTS must be 0 or 1")
+
+          log_format = os.getenv("PANEL_LOG_FORMAT", "").strip().lower()
+          if log_format and log_format not in {"json", "text"}:
+              errors.append("PANEL_LOG_FORMAT must be json or text")
+
+          deploy_fields = (
+              os.getenv("DEPLOY_HOST", "").strip(),
+              os.getenv("DEPLOY_USER", "").strip(),
+              os.getenv("DEPLOY_PATH", "").strip(),
+          )
+          if any(deploy_fields) and not all(deploy_fields):
+              errors.append(
+                  "DEPLOY_HOST, DEPLOY_USER, and DEPLOY_PATH must be configured together"
+              )
+
+          if os.getenv("DEPLOY_HOST", "").strip():
+              if not os.getenv("DEPLOY_SSH_KEY", ""):
+                  errors.append("DEPLOY_SSH_KEY secret is required when DEPLOY_HOST is set")
+              if not os.getenv("DEPLOY_KNOWN_HOSTS", ""):
+                  errors.append("DEPLOY_KNOWN_HOSTS secret is required when DEPLOY_HOST is set")
+
+          if errors:
+              print("Environment contract failed:", file=sys.stderr)
+              for error in errors:
+                  print(f"- {error}", file=sys.stderr)
+              raise SystemExit(1)
+
+          print("Environment contract is valid. Secret values were not displayed.")
+          PY
