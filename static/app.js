@@ -70,7 +70,7 @@ function parseEnvironment() {
 async function boot() {
   bindEvents();
   try {
-    const [info] = await Promise.all([api("/api/info"), loadProviders(), loadJobs()]);
+    const [info] = await Promise.all([api("/api/info"), loadProviders(), loadJobs(), loadPresets()]);
     state.info = info;
     $("cwd").value = info.cwd;
     $("allowedRoots").textContent = `Allowed roots: ${info.allowed_roots.join(", ")}`;
@@ -84,6 +84,7 @@ function bindEvents() {
   $("addProvider").addEventListener("click", () => $("providerDialog").showModal());
   $("refreshProviders").addEventListener("click", loadProviders);
   $("refreshSchema").addEventListener("click", () => state.provider && selectProvider(state.provider.id, true));
+  $("savePresetBtn").addEventListener("click", saveCurrentPreset);
   $("exportSchema").addEventListener("click", exportSchema);
   $("runButton").addEventListener("click", runCommand);
   $("stopButton").addEventListener("click", stopJob);
@@ -93,6 +94,7 @@ function bindEvents() {
     toast("Command copied");
   });
   $("refreshJobs").addEventListener("click", loadJobs);
+  $("refreshPresets").addEventListener("click", loadPresets);
   $("probeButton").addEventListener("click", () => inspectProvider(false));
   $("saveProvider").addEventListener("click", () => inspectProvider(true));
   ["cwd", "positionals", "prompt", "rawArgs", "environment", "confirmation", "timeoutSeconds"].forEach(id => {
@@ -494,7 +496,20 @@ async function openHistoricalJob(id) {
   try {
     const job = await api(`/api/jobs/${id}?offset=0`);
     $("terminal").textContent = `$ ${job.argv.map(quoteArg).join(" ")}\n\n${job.output || ""}\n[command-center] status=${job.status}, exit=${job.return_code ?? "n/a"}\n`;
-    $("jobId").textContent = `Historical job ${job.id}`;
+    $("jobId").innerHTML = `Historical job ${job.id} · <a href="#" id="downloadLogBtn" style="color:var(--accent,#38bdf8);text-decoration:underline;">Download Log</a>`;
+    const logBtn = $("downloadLogBtn");
+    if (logBtn) {
+      logBtn.onclick = (e) => {
+        e.preventDefault();
+        const blob = new Blob([$("terminal").textContent], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `job-${job.id}.log`;
+        anchor.click();
+        URL.revokeObjectURL(url);
+      };
+    }
     setStatus(job.status);
   } catch (error) { toast(error.message, true); }
 }
@@ -505,6 +520,77 @@ async function deleteJob(id) {
     await api(`/api/jobs/${id}`, { method: "DELETE" });
     await loadJobs();
     toast(`Deleted job ${id}`);
+  } catch (error) { toast(error.message, true); }
+}
+
+async function saveCurrentPreset() {
+  if (!state.provider) return toast("Select a provider first", true);
+  const name = prompt("Enter preset name:", `${state.provider.name} - ${state.commandPath.join(" ") || "default"}`);
+  if (!name) return;
+  try {
+    const payload = {
+      name,
+      provider_id: state.provider.id,
+      command_path: state.commandPath,
+      global_options: collectOptions("global"),
+      command_options: collectOptions("command"),
+      positionals: lines("positionals"),
+      raw_args: lines("rawArgs"),
+      prompt: $("prompt").value,
+    };
+    await api("/api/presets", { method: "POST", body: JSON.stringify(payload) });
+    await loadPresets();
+    toast(`Preset "${name}" saved`);
+  } catch (error) { toast(error.message, true); }
+}
+
+async function loadPresets() {
+  try {
+    const data = await api("/api/presets");
+    if (!data.presets.length) {
+      $("presetList").innerHTML = '<p class="muted">No presets saved yet.</p>';
+      return;
+    }
+    $("presetList").innerHTML = data.presets.map(preset => `
+      <div class="job-row-wrap">
+        <button class="job-row" data-preset-id="${preset.id}">
+          <span class="badge normal">${escapeHtml(preset.provider_id)}</span>
+          <strong>${escapeHtml(preset.name)}</strong>
+          <code>${escapeHtml(preset.command_path.join(" ") || "root")}</code>
+          <span>${new Date(preset.created_at * 1000).toLocaleDateString()}</span>
+        </button>
+        <button class="icon-button delete-job" data-delete-preset="${preset.id}" title="Delete preset" aria-label="Delete preset ${preset.id}">×</button>
+      </div>`).join("");
+    document.querySelectorAll("[data-preset-id]").forEach(row => row.addEventListener("click", () => applyPreset(row.dataset.presetId)));
+    document.querySelectorAll("[data-delete-preset]").forEach(button => button.addEventListener("click", () => deletePreset(button.dataset.deletePreset)));
+  } catch (error) { toast(error.message, true); }
+}
+
+async function applyPreset(id) {
+  try {
+    const data = await api("/api/presets");
+    const preset = data.presets.find(item => item.id === id);
+    if (!preset) return;
+    if (state.provider?.id !== preset.provider_id) {
+      await selectProvider(preset.provider_id);
+    }
+    state.commandPath = preset.command_path || [];
+    await renderCommandPath();
+    renderSchemas();
+    $("positionals").value = (preset.positionals || []).join("\n");
+    $("rawArgs").value = (preset.raw_args || []).join("\n");
+    $("prompt").value = preset.prompt || "";
+    updatePreview();
+    toast(`Applied preset "${preset.name}"`);
+  } catch (error) { toast(error.message, true); }
+}
+
+async function deletePreset(id) {
+  if (!confirm(`Delete preset?`)) return;
+  try {
+    await api(`/api/presets/${id}`, { method: "DELETE" });
+    await loadPresets();
+    toast(`Deleted preset`);
   } catch (error) { toast(error.message, true); }
 }
 

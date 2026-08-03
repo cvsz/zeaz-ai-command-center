@@ -91,6 +91,26 @@ class JobStore:
                 "CREATE INDEX IF NOT EXISTS jobs_status_idx ON jobs(status)"
             )
             connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS presets (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    provider_id TEXT NOT NULL,
+                    command_path_json TEXT NOT NULL,
+                    global_options_json TEXT NOT NULL,
+                    command_options_json TEXT NOT NULL,
+                    positionals_json TEXT NOT NULL,
+                    raw_args_json TEXT NOT NULL,
+                    prompt TEXT NOT NULL DEFAULT '',
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS presets_created_at_idx ON presets(created_at DESC)"
+            )
+            connection.execute(
                 "INSERT OR REPLACE INTO metadata(key, value) VALUES('schema_version', ?)",
                 (str(SCHEMA_VERSION),),
             )
@@ -227,6 +247,80 @@ class JobStore:
             )
             connection.execute("COMMIT")
             return int(cursor_age.rowcount or 0) + int(cursor_count.rowcount or 0)
+
+    def save_preset(self, preset: dict[str, Any]) -> dict[str, Any]:
+        now = time.time()
+        preset_id = preset.get("id") or os.urandom(6).hex()
+        with self.lock, self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO presets (
+                    id, name, provider_id, command_path_json, global_options_json,
+                    command_options_json, positionals_json, raw_args_json, prompt, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    provider_id = excluded.provider_id,
+                    command_path_json = excluded.command_path_json,
+                    global_options_json = excluded.global_options_json,
+                    command_options_json = excluded.command_options_json,
+                    positionals_json = excluded.positionals_json,
+                    raw_args_json = excluded.raw_args_json,
+                    prompt = excluded.prompt,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    preset_id,
+                    preset.get("name", "Untitled Preset"),
+                    preset.get("provider_id", ""),
+                    json.dumps(preset.get("command_path", []), ensure_ascii=False),
+                    json.dumps(preset.get("global_options", {}), ensure_ascii=False),
+                    json.dumps(preset.get("command_options", {}), ensure_ascii=False),
+                    json.dumps(preset.get("positionals", []), ensure_ascii=False),
+                    json.dumps(preset.get("raw_args", []), ensure_ascii=False),
+                    preset.get("prompt", ""),
+                    preset.get("created_at", now),
+                    now,
+                ),
+            )
+        return self.get_preset(preset_id)  # type: ignore
+
+    def list_presets(self) -> list[dict[str, Any]]:
+        with self.lock, self._connect() as connection:
+            rows = connection.execute("SELECT * FROM presets ORDER BY created_at DESC").fetchall()
+        return [self._preset_row_to_record(row) for row in rows]
+
+    def get_preset(self, preset_id: str) -> dict[str, Any] | None:
+        with self.lock, self._connect() as connection:
+            row = connection.execute("SELECT * FROM presets WHERE id = ?", (preset_id,)).fetchone()
+        return self._preset_row_to_record(row) if row else None
+
+    def delete_preset(self, preset_id: str) -> bool:
+        with self.lock, self._connect() as connection:
+            cursor = connection.execute("DELETE FROM presets WHERE id = ?", (preset_id,))
+            return bool(cursor.rowcount)
+
+    @staticmethod
+    def _preset_row_to_record(row: sqlite3.Row) -> dict[str, Any]:
+        def safe_json(val: str, default: Any) -> Any:
+            try:
+                return json.loads(val)
+            except (TypeError, json.JSONDecodeError):
+                return default
+
+        return {
+            "id": row["id"],
+            "name": row["name"],
+            "provider_id": row["provider_id"],
+            "command_path": safe_json(row["command_path_json"], []),
+            "global_options": safe_json(row["global_options_json"], {}),
+            "command_options": safe_json(row["command_options_json"], {}),
+            "positionals": safe_json(row["positionals_json"], []),
+            "raw_args": safe_json(row["raw_args_json"], []),
+            "prompt": row["prompt"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
 
     @staticmethod
     def _row_to_record(row: sqlite3.Row) -> dict[str, Any]:

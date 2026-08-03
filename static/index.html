@@ -39,6 +39,7 @@
         </div>
         <div class="top-actions">
           <button id="refreshSchema" class="ghost">Refresh --help</button>
+          <button id="savePresetBtn" class="ghost">Save preset</button>
           <button id="exportSchema" class="ghost">Export schema</button>
           <button id="runButton" class="primary" disabled>Run command</button>
         </div>
@@ -136,6 +137,14 @@
             <pre id="schemaPreview">No schema loaded.</pre>
           </details>
         </div>
+      </section>
+
+      <section class="panel presets-panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">SAVED TEMPLATES</p><h2>Presets &amp; Favorites</h2></div>
+          <button id="refreshPresets" class="ghost small">Refresh</button>
+        </div>
+        <div id="presetList" class="job-history"><p class="muted">No presets saved yet.</p></div>
       </section>
 
       <section class="panel history-panel">

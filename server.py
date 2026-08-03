@@ -1146,6 +1146,9 @@ class Handler(SimpleHTTPRequestHandler):
                 provider_id = unquote(path.split("/")[3])
                 self._send_json(self.app_server.registry.info(provider_id))
                 return
+            if path == "/api/presets":
+                self._send_json({"presets": self.app_server.manager.store.list_presets()})
+                return
             if path == "/api/jobs":
                 self._send_json({"jobs": self.app_server.manager.list()})
                 return
@@ -1195,6 +1198,10 @@ class Handler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/providers":
                 self._send_json(self.app_server.registry.add(self._read_json()), HTTPStatus.CREATED)
                 return
+            if parsed.path == "/api/presets":
+                saved = self.app_server.manager.store.save_preset(self._read_json())
+                self._send_json(saved, HTTPStatus.CREATED)
+                return
             if parsed.path == "/api/jobs":
                 job = self.app_server.manager.create(self._read_json())
                 self._send_json(job.snapshot(), HTTPStatus.ACCEPTED)
@@ -1221,6 +1228,13 @@ class Handler(SimpleHTTPRequestHandler):
                 provider_id = unquote(parsed.path.split("/")[3])
                 self.app_server.registry.remove(provider_id)
                 self._send_json({"ok": True, "provider_id": provider_id})
+                return
+            if parsed.path.startswith("/api/presets/"):
+                preset_id = unquote(parsed.path.split("/")[3])
+                if not self.app_server.manager.store.delete_preset(preset_id):
+                    self._send_json({"error": "Preset not found"}, HTTPStatus.NOT_FOUND)
+                    return
+                self._send_json({"ok": True, "preset_id": preset_id})
                 return
             if parsed.path.startswith("/api/jobs/"):
                 job_id = parsed.path.split("/")[3]

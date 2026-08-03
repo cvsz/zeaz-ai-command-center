@@ -48,3 +48,15 @@ def test_store_bounds_output(tmp_path: Path):
     loaded = store.get("c" * 12)
     assert len(loaded["output"]) == 64 * 1024
     assert loaded["output_base"] == 6 * 1024
+
+
+def test_store_presets(tmp_path: Path):
+    store = JobStore(tmp_path / "jobs.sqlite3")
+    preset = store.save_preset({"name": "Test Preset", "provider_id": "codex", "command_path": ["run"]})
+    assert preset["name"] == "Test Preset"
+    assert preset["command_path"] == ["run"]
+    all_presets = store.list_presets()
+    assert len(all_presets) == 1
+    assert store.delete_preset(preset["id"]) is True
+    assert len(store.list_presets()) == 0
+

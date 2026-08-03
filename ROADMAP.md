@@ -16,9 +16,9 @@
 
 - [ ] WebSocket PTY with stdin and terminal resize
 - [ ] Approval prompt relay
-- [ ] Presets and favorites
+- [x] Presets and favorites
 - [ ] Workspace file browser and diff viewer
-- [ ] Job retry/clone and downloadable logs
+- [x] Job retry/clone and downloadable logs
 - [ ] Schema correction overlays
 
 ## v3.0 — Workflow platform
