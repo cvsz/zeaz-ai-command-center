@@ -1,0 +1,11 @@
+{
+  "providers": [
+    {
+      "id": "custom-ai",
+      "name": "Custom AI CLI",
+      "executable": "custom-ai",
+      "help_args": ["--help"],
+      "version_args": ["--version"]
+    }
+  ]
+}

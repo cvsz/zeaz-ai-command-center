@@ -1,0 +1,10 @@
+[project]
+name = "ai-cli-command-center"
+version = "2.0.0"
+requires-python = ">=3.10"
+description = "Provider-agnostic web command builder generated from AI CLI help output"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
