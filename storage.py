@@ -8,6 +8,7 @@ execution layers.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sqlite3
@@ -43,12 +44,12 @@ class JobStore:
             pass
         self._initialize()
 
-    def _connect(self) -> sqlite3.Connection:
+    def _connect(self) -> contextlib.AbstractContextManager[sqlite3.Connection]:
         connection = sqlite3.connect(self.path, timeout=30, isolation_level=None)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         connection.execute("PRAGMA busy_timeout = 30000")
-        return connection
+        return contextlib.closing(connection)
 
     def _initialize(self) -> None:
         with self.lock, self._connect() as connection:
