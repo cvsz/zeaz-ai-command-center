@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Heuristic parser for common CLI ``--help`` output formats.
 
-The parser is provider-agnostic and intentionally dependency-free. It targets
+The pareser is provider-agnostic and intentionally dependency-free. It targets
 Clap, Cobra, Commander, Click/Typer, argparse, docopt-like, Symfony Console,
 and similar hand-written help layouts. Parsed schemas always retain raw help so
 operators can audit and correct heuristic results.
@@ -16,15 +16,14 @@ PARSER_VERSION = "heuristic-v3"
 ANSI_RE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
 SECTION_RE = re.compile(
     r"^\s*(usage|synopsis|commands?|available commands?|subcommands?|options?|flags?|global options?|global flags?|arguments?|positionals?|parameters?)\s*:?\s*(.*)$",
-    re.IGNORECASE,
-)
+    re.IGNORECASE,)
 FLAG_RE = re.compile(r"(?<![\w-])(-{1,2}[A-Za-z0-9?][A-Za-z0-9_.-]*|--\[no-\][A-Za-z0-9][A-Za-z0-9_.-]*)")
 VALUE_RE = re.compile(
     r"(?:=|\s)(<[^>]+>|\[[^\]]+\]|\{[^}]+\}|[A-Z][A-Z0-9_.-]*)(?:\.\.\.)?"
 )
 CHOICES_INLINE_RE = re.compile(r"(?:possible|allowed|valid|accepted)\s+values?\s*:\s*([^\]\n.)]+)", re.IGNORECASE)
 CHOICES_BRACKET_RE = re.compile(r"[\[(](?:possible|allowed|valid|accepted)\s+values?\s*:\s*([^\])]+)[\])]", re.IGNORECASE)
-CHOICES_BRACE_RE = re.compile(r"\{([^{}]+(?:[,|][^{}]+)+)\}")
+CHOICES_BRACE_RE = re.compile(r"\{([^{}\n]*)\}")
 ALIAS_RE = re.compile(r"[\[(]aliases?\s*:\s*([^\])]+)[\])]", re.IGNORECASE)
 DEFAULT_RE = re.compile(r"[\[(](?:default|default value)\s*:\s*([^\])]+)[\])]", re.IGNORECASE)
 ENV_RE = re.compile(r"[\[(](?:env|environment)\s*:\s*([A-Za-z_][A-Za-z0-9_]*)(?:=[^\])]+)?[\])]", re.IGNORECASE)
@@ -122,7 +121,7 @@ def _parse_option(spec: str, description: str, *, scope: str = "local") -> dict[
         choices = _split_choices(match.group(1))
     elif not choices:
         brace_match = CHOICES_BRACE_RE.search(spec)
-        if brace_match:
+        if brace_match and any(delimiter in brace_match.group(1) for delimiter in (",", "|")):
             choices = _split_choices(brace_match.group(1))
 
     default_match = DEFAULT_RE.search(description)

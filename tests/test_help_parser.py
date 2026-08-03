@@ -107,3 +107,13 @@ Options:
     assert color["flags"] == ["--color", "--no-color"]
     output = next(item for item in schema["options"] if item["flag"] == "--format")
     assert output["choices"] == ["text", "json", "yaml"]
+
+
+def test_malformed_brace_choices_do_not_backtrack():
+    malformed = "{{" + "z," * 20_000
+    schema = parse_help(
+        f"Tool\nOptions:\n  --format {malformed}  Output format\n",
+        executable="tool",
+    )
+    output = next(item for item in schema["options"] if item["flag"] == "--format")
+    assert output["choices"] == []
