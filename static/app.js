@@ -103,6 +103,7 @@ function bindEvents() {
   $("addWtBtn").addEventListener("click", createWorktree);
   $("createPrBtn").addEventListener("click", createPullRequest);
   $("updateBtn").addEventListener("click", updateViaGithub);
+  $("mfaSetupBtn").addEventListener("click", setupMfa);
   $("sendStdinBtn").addEventListener("click", sendStdinRelay);
   $("probeButton").addEventListener("click", () => inspectProvider(false));
   $("saveProvider").addEventListener("click", () => inspectProvider(true));
@@ -793,6 +794,19 @@ async function sendStdinRelay() {
   } catch (error) {
     toast(`Failed to relay stdin: ${error.message}`, true);
   }
+}
+
+async function setupMfa() {
+  try {
+    const res = await api("/api/mfa/setup", { method: "POST" });
+    if (res.ok) {
+      alert(`MFA Setup Secret Generated:\n\nSecret: ${res.secret}\n\nAuthenticator URI: ${res.otpauth_url}\n\nPlease add this secret to your Authenticator app (Google Authenticator / 1Password / Authy).`);
+      toast("MFA Secret generated and enabled");
+      $("mfaSetupBtn").textContent = "🔒 MFA Enabled";
+      $("mfaSetupBtn").style.borderColor = "#4caf50";
+      $("mfaSetupBtn").style.color = "#4caf50";
+    }
+  } catch (error) { toast(`MFA Setup error: ${error.message}`, true); }
 }
 
 async function inspectProvider(save) {

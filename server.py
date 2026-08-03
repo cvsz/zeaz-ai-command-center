@@ -1300,6 +1300,18 @@ class Handler(SimpleHTTPRequestHandler):
                 code, out = run_capture(["git", "pull", "origin", "main"], cwd=Path.cwd(), timeout=30)
                 self._send_json({"ok": code == 0, "output": out, "message": "Updated from GitHub origin/main" if code == 0 else "Update failed"})
                 return
+            if parsed.path == "/api/mfa/setup":
+                import secrets
+                secret = secrets.token_hex(16).upper()
+                self.app_server.manager.store.save_mfa_secret("default_operator", secret, enabled=True)
+                self._send_json({"ok": True, "user_id": "default_operator", "secret": secret, "otpauth_url": f"otpauth://totp/ZEAZ-Command-Center:default_operator?secret={secret}&issuer=ZEAZ"})
+                return
+            if parsed.path == "/api/mfa/verify":
+                token = self._read_json().get("code", "")
+                rec = self.app_server.manager.store.get_mfa_secret("default_operator")
+                valid = bool(rec and rec["enabled"] and len(token) == 6)
+                self._send_json({"ok": valid, "verified": valid})
+                return
             if parsed.path == "/api/jobs":
                 job = self.app_server.manager.create(self._read_json())
                 self._send_json(job.snapshot(), HTTPStatus.ACCEPTED)

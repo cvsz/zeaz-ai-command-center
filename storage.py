@@ -153,6 +153,16 @@ class JobStore:
                 """
             )
             connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mfa_secrets (
+                    user_id TEXT PRIMARY KEY,
+                    secret TEXT NOT NULL,
+                    enabled INTEGER NOT NULL DEFAULT 0,
+                    created_at REAL NOT NULL
+                )
+                """
+            )
+            connection.execute(
                 "CREATE INDEX IF NOT EXISTS presets_created_at_idx ON presets(created_at DESC)"
             )
             connection.execute(
@@ -446,6 +456,26 @@ class JobStore:
         with self.lock, self._connect() as connection:
             rows = connection.execute("SELECT * FROM worktrees ORDER BY created_at DESC").fetchall()
         return [{"id": r["id"], "path": r["path"], "branch": r["branch"], "status": r["status"]} for r in rows]
+
+    def save_mfa_secret(self, user_id: str, secret: str, enabled: bool = True) -> None:
+        now = time.time()
+        with self.lock, self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO mfa_secrets (user_id, secret, enabled, created_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    secret = excluded.secret,
+                    enabled = excluded.enabled
+                """,
+                (user_id, secret, 1 if enabled else 0, now),
+            )
+
+    def get_mfa_secret(self, user_id: str) -> dict[str, Any] | None:
+        with self.lock, self._connect() as connection:
+            row = connection.execute("SELECT * FROM mfa_secrets WHERE user_id = ?", (user_id,)).fetchone()
+        if not row: return None
+        return {"user_id": row["user_id"], "secret": row["secret"], "enabled": bool(row["enabled"])}
 
     @staticmethod
     def _preset_row_to_record(row: sqlite3.Row) -> dict[str, Any]:
