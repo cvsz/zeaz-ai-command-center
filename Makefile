@@ -23,6 +23,9 @@ package: clean
 	cd .. && zip -r zeaz-ai-command-center-v$(VERSION).zip zeaz-ai-command-center-v2.1 \
 		-x '*/__pycache__/*' '*/.pytest_cache/*' '*/.ruff_cache/*' '*/.git/*' '*.sqlite3*'
 
+build:
+	./build.sh
+
 clean:
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
 	rm -rf .pytest_cache .ruff_cache .coverage htmlcov
