@@ -1,10 +1,68 @@
 # ZEAZ AI Command Center
 
-A secure local web control panel that discovers installed AI command-line tools, parses their `--help` output, generates structured command builders, executes argv without a shell, and keeps durable job history.
+## 🌟 Introduction
 
-It supports OpenAI Codex, Claude Code, Gemini CLI, Qwen Code, Aider, OpenCode, Goose, Ollama, `llm`, and custom executables without hard-coding provider-specific command trees.
+**ZEAZ AI Command Center** is a secure, local-first web control panel and execution engine for modern AI CLI tools (including OpenAI Codex, Claude Code, Gemini CLI, Qwen Code, ShellGPT, Aider, Ollama, and custom binaries).
+
+Instead of requiring manual command-line typing or maintaining hardcoded CLI definitions, the Command Center automatically scans your OS environment, parses `--help` outputs in real time using a heuristic parser, auto-generates interactive Web UI command builders, and executes commands safely via direct `subprocess` calls (`shell=False`) with live output streaming.
+
+---
+
+## 🎬 Live Demo & Feature Walkthrough
+
+```text
+ ┌─────────────────────────────────────────────────────────────────────────────────┐
+ │ ZEAZ AI COMMAND CENTER v3.0                                  [⚡ Update via GitHub] │
+ ├──────────────────────────┬──────────────────────────────────────────────────────┤
+ │ 🤖 PROVIDERS             │ ⚙️ COMMAND BUILDER                                   │
+ │  • OpenAI Codex          │  Target Directory: [/home/cvsz/project]               │
+ │  • Claude Code           │  Subcommand: [run]                                    │
+ │  • Gemini CLI            │  Prompt: "Refactor database connection pool"          │
+ │  • ShellGPT              │  [▶ Run Command]   [💾 Save Preset]                   │
+ ├──────────────────────────┼──────────────────────────────────────────────────────┤
+ │ 📂 WORKSPACE BROWSER     │ 📺 LIVE TERMINAL STREAM                              │
+ │  [DIR] src/              │  [19:35:01] Initializing process PTY...              │
+ │        server.py         │  [19:35:02] Analyzing AST and dependencies...        │
+ └──────────────────────────┴──────────────────────────────────────────────────────┘
+```
+
+### Key Workflow Overview:
+1. **Automated Discovery**: Launch the server and all installed AI tools are automatically detected.
+2. **Interactive Builder**: Select options, positional arguments, or prompts in generated UI controls.
+3. **Durable Execution**: Stream live output over SSE, download logs, and monitor execution state in real-time.
+4. **v3.0 Workflows & Sandboxing**: Execute multi-step DAG workflows, manage MCP servers, or spawn ephemeral Git worktrees.
+
+---
+
+## 📖 How To Use Guide
+
+### Step 1: Quick Start Launch
+Run the server locally using Python:
+```bash
+python3 server.py --host 127.0.0.1 --port 8765
+```
+Open `http://127.0.0.1:8765` in your browser.
+
+### Step 2: Selecting an AI Provider
+1. Click any installed AI provider (e.g. **Claude Code**, **OpenAI Codex**, **Gemini CLI**) in the left sidebar.
+2. The panel probes `--help` and renders all available flags, subcommands, and options automatically.
+
+### Step 3: Configuring & Executing Commands
+1. **Set Working Directory**: Enter the target project path in **Working Directory**.
+2. **Fill Parameters**: Select subcommands, enter prompts, or pass positional arguments.
+3. **Run Command**: Click **Run command** to launch. Output streams in real-time under **Process stream**.
+
+### Step 4: Using v2.2 & v3.0 Advanced Tools
+- **Presets & Favorites**: Click **Save preset** to save reusable command configurations.
+- **Download Logs**: Click **Download log** in historical job windows to export full terminal output.
+- **Git Diff & File Browser**: Expand **Workspace File Browser** or **Git Diff Viewer** to inspect uncommitted changes.
+- **Workflows & MCP Servers**: Use **+ Workflow**, **+ MCP Server**, or **+ Ephemeral Worktree** under the Workflow Platform section.
+
+---
 
 ## Highlights
+
+- Dynamic provider and nested subcommand discovery
 
 - Dynamic provider and nested subcommand discovery
 - Heuristic parser for Clap, Cobra, Commander, Click/Typer, argparse, Symfony-style, and hand-written help
