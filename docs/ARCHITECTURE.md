@@ -16,9 +16,9 @@ Browser
 ThreadingHTTPServer
   ├─ Host/auth/origin/rate-limit policy
   ├─ ProviderRegistry
-  │    ├─ PATH discovery
+  │    ├─ PATH + system directory discovery
   │    ├─ version + SHA-256 fingerprint
-  │    └─ help schema cache
+  │    └─ help schema + overlay cache
   ├─ help_parser.py
   │    └─ heuristic-v3 schema
   ├─ JobManager
@@ -27,8 +27,12 @@ ThreadingHTTPServer
   │    ├─ process-group termination
   │    ├─ output redaction + retention
   │    └─ SSE notifications
+  ├─ WorkflowEngine & MCPManager
+  │    ├─ multi-step DAG workflows
+  │    ├─ MCP tool server registration
+  │    └─ ephemeral git worktree sandboxes
   └─ JobStore
-       └─ SQLite WAL database
+       └─ SQLite WAL database (Schema v3)
 ```
 
 ## Execution boundary
