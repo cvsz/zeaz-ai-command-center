@@ -69,6 +69,12 @@ DEFAULT_CANDIDATES = [
     {"id": "goose", "name": "Goose", "executable": "goose"},
     {"id": "ollama", "name": "Ollama", "executable": "ollama"},
     {"id": "llm", "name": "LLM", "executable": "llm"},
+    {"id": "sgpt", "name": "ShellGPT", "executable": "sgpt"},
+    {"id": "tgpt", "name": "TerminalGPT", "executable": "tgpt"},
+    {"id": "fabric", "name": "Fabric AI", "executable": "fabric"},
+    {"id": "aichat", "name": "AIChat", "executable": "aichat"},
+    {"id": "copilot", "name": "GitHub Copilot CLI", "executable": "copilot"},
+    {"id": "gh-copilot", "name": "GitHub Copilot Extension", "executable": "gh"},
 ]
 
 DANGEROUS_TOKENS = {
@@ -296,8 +302,23 @@ class ProviderRegistry:
 
     def list(self, *, include_missing: bool = False) -> list[dict[str, Any]]:
         providers: dict[str, dict[str, Any]] = {}
+        os_paths = [
+            Path.home() / ".local" / "bin",
+            Path.home() / ".cargo" / "bin",
+            Path.home() / ".nvm" / "versions" / "node",
+            Path.home() / "go" / "bin",
+            Path("/usr/local/bin"),
+            Path("/opt/homebrew/bin"),
+        ]
         for candidate in DEFAULT_CANDIDATES:
             resolved = shutil.which(candidate["executable"])
+            if not resolved:
+                for base_dir in os_paths:
+                    if base_dir.exists():
+                        target = base_dir / candidate["executable"]
+                        if target.is_file() and os.access(target, os.X_OK):
+                            resolved = str(target.resolve())
+                            break
             if resolved or include_missing:
                 providers[candidate["id"]] = {
                     **candidate,
