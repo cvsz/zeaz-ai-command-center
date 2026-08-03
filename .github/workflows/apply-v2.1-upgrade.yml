@@ -1,11 +1,6 @@
 name: Apply v2.1 Upgrade
 
 on:
-  push:
-    branches:
-      - upgrade/v2.1-production-foundation
-    paths:
-      - .upgrade/READY
   pull_request:
     branches:
       - main
