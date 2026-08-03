@@ -1296,6 +1296,10 @@ class Handler(SimpleHTTPRequestHandler):
                 code, out = run_capture(["gh", "pr", "create", "--title", title, "--body", body], cwd=Path.cwd(), timeout=20)
                 self._send_json({"ok": code == 0, "output": out}, HTTPStatus.CREATED)
                 return
+            if parsed.path == "/api/update":
+                code, out = run_capture(["git", "pull", "origin", "main"], cwd=Path.cwd(), timeout=30)
+                self._send_json({"ok": code == 0, "output": out, "message": "Updated from GitHub origin/main" if code == 0 else "Update failed"})
+                return
             if parsed.path == "/api/jobs":
                 job = self.app_server.manager.create(self._read_json())
                 self._send_json(job.snapshot(), HTTPStatus.ACCEPTED)

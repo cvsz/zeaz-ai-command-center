@@ -102,6 +102,7 @@ function bindEvents() {
   $("addMcpBtn").addEventListener("click", createMcpServer);
   $("addWtBtn").addEventListener("click", createWorktree);
   $("createPrBtn").addEventListener("click", createPullRequest);
+  $("updateBtn").addEventListener("click", updateViaGithub);
   $("probeButton").addEventListener("click", () => inspectProvider(false));
   $("saveProvider").addEventListener("click", () => inspectProvider(true));
   $("langSelect").addEventListener("change", (e) => applyI18n(e.target.value));
@@ -760,6 +761,20 @@ async function createPullRequest() {
       toast("Pull Request created successfully");
     } else {
       toast(`PR creation output: ${res.output.slice(0, 100)}`, true);
+    }
+  } catch (error) { toast(error.message, true); }
+}
+
+async function updateViaGithub() {
+  if (!confirm("Pull latest updates directly from GitHub origin/main?")) return;
+  try {
+    toast("Checking and pulling updates from GitHub...");
+    const res = await api("/api/update", { method: "POST" });
+    if (res.ok) {
+      toast("Successfully updated from GitHub! Reloading app...");
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      toast(`Update failed: ${res.output || res.message}`, true);
     }
   } catch (error) { toast(error.message, true); }
 }
