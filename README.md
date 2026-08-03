@@ -283,6 +283,9 @@ Dangerous variables such as `LD_PRELOAD`, `BASH_ENV`, `NODE_OPTIONS`, `PYTHONPAT
 | `PANEL_MAX_OUTPUT_BYTES` | `8388608` | Output retained per job |
 | `PANEL_HELP_TIMEOUT_SECONDS` | `20` | Help inspection timeout |
 | `PANEL_MAX_HELP_BYTES` | `2097152` | Help output cap |
+| `PANEL_USE_PTY` | `0` | Enable pseudo-terminal master-slave allocation (`1`) |
+| `PANEL_SANDBOX_DRIVER` | empty | Container sandbox wrapper driver (`bwrap`, `docker`) |
+| `PANEL_POSTGRES_URL` | empty | PostgreSQL connection URL for enterprise storage adapter |
 | `PANEL_RATE_LIMIT_PER_MINUTE` | `240` | API requests per source IP |
 | `PANEL_LOG_FORMAT` | `json` | `json` or `text` |
 | `PANEL_ENABLE_HSTS` | `0` | Add HSTS behind HTTPS-only proxy |

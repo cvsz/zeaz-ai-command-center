@@ -83,12 +83,27 @@ data: {"id":"...","status":"running","output":"...","next_offset":42}
 
 The stream closes after a terminal state.
 
-### Stop and delete
+### Stop, stdin relay, and delete
 
+- `POST /api/jobs/{job_id}/input`
 - `POST /api/jobs/{job_id}/stop`
 - `DELETE /api/jobs/{job_id}`
 
-Only terminal jobs can be deleted.
+Only terminal jobs can be deleted. Stdin relay accepts `{"input": "..."}`.
+
+## Presets, Workflows, MCP & Worktrees
+
+- `GET /api/presets` | `POST /api/presets` | `DELETE /api/presets/{preset_id}`
+- `GET /api/workflows` | `POST /api/workflows` | `DELETE /api/workflows/{workflow_id}`
+- `GET /api/mcp` | `POST /api/mcp` | `DELETE /api/mcp/{mcp_id}`
+- `GET /api/worktrees` | `POST /api/worktrees` | `DELETE /api/worktrees/{worktree_id}`
+
+## Multi-User Auth, MFA & GitHub PRs
+
+- `GET /api/users` | `POST /api/users` (RBAC user accounts)
+- `POST /api/mfa/setup` | `POST /api/mfa/verify` (TOTP MFA)
+- `GET /api/github/pulls` | `POST /api/github/pulls` (GitHub PR integration)
+- `POST /api/update` (Pull latest release from GitHub origin/main)
 
 ## Error format
 
