@@ -1,0 +1,45 @@
+name: Bug report
+description: Create a report to help us improve AI CLI Command Center
+title: "[BUG]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to fill out this bug report!
+  - type: textarea
+    id: summary
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Describe what went wrong...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior.
+      placeholder: |
+        1. Start server with `python3 server.py`
+        2. Open `http://127.0.0.1:8080`
+        3. Click on ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: A clear description of what you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment Info
+      description: OS version, Python version, Browser, AI CLI tool version.
+      placeholder: |
+        - OS: Ubuntu 24.04 LTS
+        - Python: 3.12.3
+        - AI CLI Executable: claude v1.0.0
+    validations:
+      required: false
