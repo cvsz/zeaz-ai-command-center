@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 3
 TERMINAL_STATES = {"succeeded", "failed", "stopped", "timed_out", "orphaned"}
 ACTIVE_STATES = {"queued", "running", "stopping"}
 
@@ -114,6 +114,41 @@ class JobStore:
                     provider_id TEXT NOT NULL,
                     overlay_json TEXT NOT NULL,
                     updated_at REAL NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS workflows (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    steps_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS mcp_servers (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    command TEXT NOT NULL,
+                    args_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at REAL NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS worktrees (
+                    id TEXT PRIMARY KEY,
+                    path TEXT NOT NULL,
+                    branch TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at REAL NOT NULL
                 )
                 """
             )
@@ -333,6 +368,62 @@ class JobStore:
             return json.loads(row["overlay_json"])
         except (TypeError, json.JSONDecodeError):
             return {}
+
+    def save_workflow(self, workflow: dict[str, Any]) -> dict[str, Any]:
+        now = time.time()
+        wf_id = workflow.get("id") or os.urandom(6).hex()
+        with self.lock, self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO workflows (id, name, steps_json, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    steps_json = excluded.steps_json,
+                    status = excluded.status,
+                    updated_at = excluded.updated_at
+                """,
+                (wf_id, workflow.get("name", "Untitled Workflow"), json.dumps(workflow.get("steps", []), ensure_ascii=False), workflow.get("status", "draft"), workflow.get("created_at", now), now),
+            )
+        return {"id": wf_id, "name": workflow.get("name", "Untitled Workflow"), "steps": workflow.get("steps", []), "status": workflow.get("status", "draft")}
+
+    def list_workflows(self) -> list[dict[str, Any]]:
+        with self.lock, self._connect() as connection:
+            rows = connection.execute("SELECT * FROM workflows ORDER BY created_at DESC").fetchall()
+        result = []
+        for r in rows:
+            try: steps = json.loads(r["steps_json"])
+            except Exception: steps = []
+            result.append({"id": r["id"], "name": r["name"], "steps": steps, "status": r["status"]})
+        return result
+
+    def save_mcp_server(self, server: dict[str, Any]) -> dict[str, Any]:
+        now = time.time()
+        srv_id = server.get("id") or os.urandom(6).hex()
+        with self.lock, self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO mcp_servers (id, name, command, args_json, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    command = excluded.command,
+                    args_json = excluded.args_json,
+                    status = excluded.status
+                """,
+                (srv_id, server.get("name", "MCP Server"), server.get("command", "npx"), json.dumps(server.get("args", []), ensure_ascii=False), server.get("status", "active"), now),
+            )
+        return {"id": srv_id, "name": server.get("name", "MCP Server"), "command": server.get("command", "npx"), "args": server.get("args", []), "status": server.get("status", "active")}
+
+    def list_mcp_servers(self) -> list[dict[str, Any]]:
+        with self.lock, self._connect() as connection:
+            rows = connection.execute("SELECT * FROM mcp_servers ORDER BY created_at DESC").fetchall()
+        result = []
+        for r in rows:
+            try: args = json.loads(r["args_json"])
+            except Exception: args = []
+            result.append({"id": r["id"], "name": r["name"], "command": r["command"], "args": args, "status": r["status"]})
+        return result
 
     @staticmethod
     def _preset_row_to_record(row: sqlite3.Row) -> dict[str, Any]:

@@ -60,3 +60,15 @@ def test_store_presets(tmp_path: Path):
     assert store.delete_preset(preset["id"]) is True
     assert len(store.list_presets()) == 0
 
+
+def test_store_v3_workflows_and_mcp(tmp_path: Path):
+    store = JobStore(tmp_path / "jobs.sqlite3")
+    wf = store.save_workflow({"name": "Test Pipeline", "steps": [{"name": "step1"}]})
+    assert wf["name"] == "Test Pipeline"
+    assert len(store.list_workflows()) == 1
+
+    mcp = store.save_mcp_server({"name": "Test MCP", "command": "npx", "args": ["mcp-server"]})
+    assert mcp["name"] == "Test MCP"
+    assert len(store.list_mcp_servers()) == 1
+
+

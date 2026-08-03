@@ -1190,6 +1190,12 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/presets":
                 self._send_json({"presets": self.app_server.manager.store.list_presets()})
                 return
+            if path == "/api/workflows":
+                self._send_json({"workflows": self.app_server.manager.store.list_workflows()})
+                return
+            if path == "/api/mcp":
+                self._send_json({"mcp_servers": self.app_server.manager.store.list_mcp_servers()})
+                return
             if path == "/api/jobs":
                 self._send_json({"jobs": self.app_server.manager.list()})
                 return
@@ -1248,6 +1254,14 @@ class Handler(SimpleHTTPRequestHandler):
                 return
             if parsed.path == "/api/presets":
                 saved = self.app_server.manager.store.save_preset(self._read_json())
+                self._send_json(saved, HTTPStatus.CREATED)
+                return
+            if parsed.path == "/api/workflows":
+                saved = self.app_server.manager.store.save_workflow(self._read_json())
+                self._send_json(saved, HTTPStatus.CREATED)
+                return
+            if parsed.path == "/api/mcp":
+                saved = self.app_server.manager.store.save_mcp_server(self._read_json())
                 self._send_json(saved, HTTPStatus.CREATED)
                 return
             if parsed.path == "/api/jobs":

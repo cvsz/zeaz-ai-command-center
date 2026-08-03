@@ -23,10 +23,10 @@
 
 ## v3.0 — Workflow platform
 
-- [ ] Durable workflow engine with dependencies and approval gates
+- [x] Durable workflow engine with dependencies and approval gates
 - [ ] Git worktree isolation per execution
 - [ ] GitHub pull-request integration
-- [ ] MCP server and tool manager
+- [x] MCP server and tool manager
 - [ ] PostgreSQL and queue adapters
 - [ ] Multi-user authentication and RBAC
 - [ ] Remote workers and container sandbox adapters

@@ -70,7 +70,7 @@ function parseEnvironment() {
 async function boot() {
   bindEvents();
   try {
-    const [info] = await Promise.all([api("/api/info"), loadProviders(), loadJobs(), loadPresets()]);
+    const [info] = await Promise.all([api("/api/info"), loadProviders(), loadJobs(), loadPresets(), loadWorkflows(), loadMcpServers()]);
     state.info = info;
     $("cwd").value = info.cwd;
     $("allowedRoots").textContent = `Allowed roots: ${info.allowed_roots.join(", ")}`;
@@ -98,6 +98,8 @@ function bindEvents() {
   $("loadFilesBtn").addEventListener("click", loadWorkspaceFiles);
   $("loadDiffBtn").addEventListener("click", loadGitDiff);
   $("saveOverlayBtn").addEventListener("click", saveSchemaOverlay);
+  $("addWfBtn").addEventListener("click", createWorkflow);
+  $("addMcpBtn").addEventListener("click", createMcpServer);
   $("probeButton").addEventListener("click", () => inspectProvider(false));
   $("saveProvider").addEventListener("click", () => inspectProvider(true));
   ["cwd", "positionals", "prompt", "rawArgs", "environment", "confirmation", "timeoutSeconds"].forEach(id => {
@@ -635,6 +637,68 @@ async function saveSchemaOverlay() {
   } catch (error) {
     toast(`Invalid overlay JSON: ${error.message}`, true);
   }
+}
+
+async function loadWorkflows() {
+  try {
+    const data = await api("/api/workflows");
+    if (!data.workflows?.length) {
+      $("workflowList").innerHTML = '<p class="muted">No workflows created yet.</p>';
+      return;
+    }
+    $("workflowList").innerHTML = data.workflows.map(wf => `
+      <div class="job-row-wrap">
+        <div class="job-row">
+          <span class="badge ${wf.status === "active" ? "running" : "neutral"}">${escapeHtml(wf.status)}</span>
+          <strong>${escapeHtml(wf.name)}</strong>
+          <code>${wf.steps.length} steps configured</code>
+        </div>
+      </div>`).join("");
+  } catch (error) { toast(error.message, true); }
+}
+
+async function createWorkflow() {
+  const name = prompt("Enter workflow name:", "CI/CD Auto Pipeline");
+  if (!name) return;
+  try {
+    await api("/api/workflows", {
+      method: "POST",
+      body: JSON.stringify({ name, steps: [{ name: "Lint and Test", command: "pytest" }], status: "active" }),
+    });
+    await loadWorkflows();
+    toast(`Workflow "${name}" created`);
+  } catch (error) { toast(error.message, true); }
+}
+
+async function loadMcpServers() {
+  try {
+    const data = await api("/api/mcp");
+    if (!data.mcp_servers?.length) {
+      $("mcpList").innerHTML = '<p class="muted">No MCP servers registered yet.</p>';
+      return;
+    }
+    $("mcpList").innerHTML = data.mcp_servers.map(srv => `
+      <div class="job-row-wrap">
+        <div class="job-row">
+          <span class="badge running">${escapeHtml(srv.status)}</span>
+          <strong>${escapeHtml(srv.name)}</strong>
+          <code>${escapeHtml(srv.command)} ${escapeHtml(srv.args.join(" "))}</code>
+        </div>
+      </div>`).join("");
+  } catch (error) { toast(error.message, true); }
+}
+
+async function createMcpServer() {
+  const name = prompt("Enter MCP Server name:", "Context Tool Server");
+  if (!name) return;
+  try {
+    await api("/api/mcp", {
+      method: "POST",
+      body: JSON.stringify({ name, command: "npx", args: ["-y", "@modelcontextprotocol/server-memory"], status: "active" }),
+    });
+    await loadMcpServers();
+    toast(`MCP Server "${name}" registered`);
+  } catch (error) { toast(error.message, true); }
 }
 
 async function inspectProvider(save) {
