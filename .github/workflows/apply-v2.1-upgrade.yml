@@ -6,6 +6,12 @@ on:
       - upgrade/v2.1-production-foundation
     paths:
       - .upgrade/READY
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .upgrade/READY
+      - .github/workflows/apply-v2.1-upgrade.yml
 
 permissions:
   contents: write
@@ -16,6 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: upgrade/v2.1-production-foundation
           fetch-depth: 0
       - name: Verify upgrade marker
         run: test -f .upgrade/READY
