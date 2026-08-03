@@ -25,7 +25,7 @@
 
 - [x] Durable workflow engine with dependencies and approval gates
 - [x] Git worktree isolation per execution
-- [ ] GitHub pull-request integration
+- [x] GitHub pull-request integration
 - [x] MCP server and tool manager
 - [ ] PostgreSQL and queue adapters
 - [ ] Multi-user authentication and RBAC

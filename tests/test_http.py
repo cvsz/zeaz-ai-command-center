@@ -105,3 +105,19 @@ def test_http_files_and_diff(tmp_path, monkeypatch):
         server.server_close()
         thread.join(timeout=5)
 
+
+def test_http_github_pulls(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("PANEL_ALLOW_ANY_CWD", "1")
+    server, manager, thread = start_server(tmp_path)
+    try:
+        status, _, payload = request(server, "GET", f"/api/github/pulls?cwd={tmp_path}", token="test-token")
+        assert status == 200
+        assert "pulls" in json.loads(payload)
+    finally:
+        server.shutdown()
+        manager.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
