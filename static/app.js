@@ -95,6 +95,8 @@ function bindEvents() {
   });
   $("refreshJobs").addEventListener("click", loadJobs);
   $("refreshPresets").addEventListener("click", loadPresets);
+  $("loadFilesBtn").addEventListener("click", loadWorkspaceFiles);
+  $("loadDiffBtn").addEventListener("click", loadGitDiff);
   $("probeButton").addEventListener("click", () => inspectProvider(false));
   $("saveProvider").addEventListener("click", () => inspectProvider(true));
   ["cwd", "positionals", "prompt", "rawArgs", "environment", "confirmation", "timeoutSeconds"].forEach(id => {
@@ -592,6 +594,30 @@ async function deletePreset(id) {
     await loadPresets();
     toast(`Deleted preset`);
   } catch (error) { toast(error.message, true); }
+}
+
+async function loadWorkspaceFiles() {
+  try {
+    const cwd = encodeURIComponent($("cwd").value || "");
+    const data = await api(`/api/files?cwd=${cwd}`);
+    if (!data.items?.length) {
+      $("fileBrowserPreview").textContent = "No files found in workspace.";
+      return;
+    }
+    $("fileBrowserPreview").textContent = data.items.map(item => `${item.is_dir ? "[DIR] " : "      "}${item.name} (${item.size} bytes)`).join("\n");
+  } catch (error) {
+    $("fileBrowserPreview").textContent = `Error: ${error.message}`;
+  }
+}
+
+async function loadGitDiff() {
+  try {
+    const cwd = encodeURIComponent($("cwd").value || "");
+    const data = await api(`/api/diff?cwd=${cwd}`);
+    $("gitDiffPreview").textContent = data.diff || "No uncommitted git changes detected in workspace.";
+  } catch (error) {
+    $("gitDiffPreview").textContent = `Error: ${error.message}`;
+  }
 }
 
 async function inspectProvider(save) {

@@ -220,13 +220,14 @@ def resolve_executable(executable: Any) -> str:
     return str(Path(resolved).resolve())
 
 
-def run_capture(argv: list[str], *, timeout: int = HELP_TIMEOUT_SECONDS) -> tuple[int, str]:
+def run_capture(argv: list[str], *, cwd: Path | str | None = None, timeout: int = HELP_TIMEOUT_SECONDS) -> tuple[int, str]:
     env = os.environ.copy()
     env.setdefault("TERM", "dumb")
     env.setdefault("NO_COLOR", "1")
     env.setdefault("CLICOLOR", "0")
     result = subprocess.run(
         argv,
+        cwd=cwd,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -1123,6 +1124,20 @@ class Handler(SimpleHTTPRequestHandler):
                     "max_concurrent_jobs": MAX_CONCURRENT_JOBS,
                     "environment_policy": "allowlist" if os.getenv("PANEL_ALLOW_ANY_ENV", "0") != "1" else "allow-any-except-blocked",
                 })
+                return
+            if path == "/api/files":
+                target_cwd = validate_cwd(parse_qs(parsed.query).get("cwd", [""])[0] or None)
+                file_items = []
+                for p in sorted(target_cwd.iterdir()):
+                    if p.name.startswith((".", "__pycache__", "venv")):
+                        continue
+                    file_items.append({"name": p.name, "is_dir": p.is_dir(), "size": p.stat().st_size if p.is_file() else 0})
+                self._send_json({"cwd": str(target_cwd), "items": file_items[:200]})
+                return
+            if path == "/api/diff":
+                target_cwd = validate_cwd(parse_qs(parsed.query).get("cwd", [""])[0] or None)
+                code, output = run_capture(["git", "diff"], cwd=target_cwd, timeout=10)
+                self._send_json({"cwd": str(target_cwd), "diff": output if code == 0 else ""})
                 return
             if path == "/api/metrics":
                 metrics = self.app_server.manager.metrics()

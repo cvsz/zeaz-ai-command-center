@@ -17,7 +17,7 @@
 - [ ] WebSocket PTY with stdin and terminal resize
 - [ ] Approval prompt relay
 - [x] Presets and favorites
-- [ ] Workspace file browser and diff viewer
+- [x] Workspace file browser and diff viewer
 - [x] Job retry/clone and downloadable logs
 - [ ] Schema correction overlays
 

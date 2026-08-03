@@ -133,6 +133,18 @@
           <div class="terminal-meta"><span id="jobId">No active job</span><span id="elapsed">00:00</span></div>
 
           <details class="schema-details">
+            <summary>Workspace File Browser</summary>
+            <div style="margin-top:0.5rem;"><button id="loadFilesBtn" class="ghost small">Browse workspace files</button></div>
+            <pre id="fileBrowserPreview" style="max-height:200px;overflow:auto;margin-top:0.5rem;">Click "Browse workspace files" to list directory contents.</pre>
+          </details>
+
+          <details class="schema-details">
+            <summary>Git Diff Viewer</summary>
+            <div style="margin-top:0.5rem;"><button id="loadDiffBtn" class="ghost small">Refresh git diff</button></div>
+            <pre id="gitDiffPreview" style="max-height:200px;overflow:auto;margin-top:0.5rem;">No git diff loaded.</pre>
+          </details>
+
+          <details class="schema-details">
             <summary>Parsed help schema</summary>
             <pre id="schemaPreview">No schema loaded.</pre>
           </details>
