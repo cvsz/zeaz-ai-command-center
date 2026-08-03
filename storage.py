@@ -425,6 +425,28 @@ class JobStore:
             result.append({"id": r["id"], "name": r["name"], "command": r["command"], "args": args, "status": r["status"]})
         return result
 
+    def save_worktree(self, wt: dict[str, Any]) -> dict[str, Any]:
+        now = time.time()
+        wt_id = wt.get("id") or os.urandom(6).hex()
+        with self.lock, self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO worktrees (id, path, branch, status, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    path = excluded.path,
+                    branch = excluded.branch,
+                    status = excluded.status
+                """,
+                (wt_id, wt.get("path", ""), wt.get("branch", "main"), wt.get("status", "active"), now),
+            )
+        return {"id": wt_id, "path": wt.get("path", ""), "branch": wt.get("branch", "main"), "status": wt.get("status", "active")}
+
+    def list_worktrees(self) -> list[dict[str, Any]]:
+        with self.lock, self._connect() as connection:
+            rows = connection.execute("SELECT * FROM worktrees ORDER BY created_at DESC").fetchall()
+        return [{"id": r["id"], "path": r["path"], "branch": r["branch"], "status": r["status"]} for r in rows]
+
     @staticmethod
     def _preset_row_to_record(row: sqlite3.Row) -> dict[str, Any]:
         def safe_json(val: str, default: Any) -> Any:

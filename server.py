@@ -1196,6 +1196,9 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/mcp":
                 self._send_json({"mcp_servers": self.app_server.manager.store.list_mcp_servers()})
                 return
+            if path == "/api/worktrees":
+                self._send_json({"worktrees": self.app_server.manager.store.list_worktrees()})
+                return
             if path == "/api/jobs":
                 self._send_json({"jobs": self.app_server.manager.list()})
                 return
@@ -1263,6 +1266,14 @@ class Handler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/mcp":
                 saved = self.app_server.manager.store.save_mcp_server(self._read_json())
                 self._send_json(saved, HTTPStatus.CREATED)
+                return
+            if parsed.path == "/api/worktrees":
+                wt_input = self._read_json()
+                path = wt_input.get("path") or f"/tmp/worktree-{os.urandom(4).hex()}"
+                branch = wt_input.get("branch") or f"feature/{os.urandom(4).hex()}"
+                code, out = run_capture(["git", "worktree", "add", "-b", branch, path], cwd=Path.cwd(), timeout=15)
+                saved = self.app_server.manager.store.save_worktree({"path": path, "branch": branch, "status": "active" if code == 0 else "failed"})
+                self._send_json({**saved, "output": out}, HTTPStatus.CREATED)
                 return
             if parsed.path == "/api/jobs":
                 job = self.app_server.manager.create(self._read_json())

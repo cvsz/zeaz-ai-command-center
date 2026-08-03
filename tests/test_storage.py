@@ -71,4 +71,9 @@ def test_store_v3_workflows_and_mcp(tmp_path: Path):
     assert mcp["name"] == "Test MCP"
     assert len(store.list_mcp_servers()) == 1
 
+    wt = store.save_worktree({"path": "/tmp/wt-test", "branch": "feature/test", "status": "active"})
+    assert wt["branch"] == "feature/test"
+    assert len(store.list_worktrees()) == 1
+
+
 

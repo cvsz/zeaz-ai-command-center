@@ -70,7 +70,7 @@ function parseEnvironment() {
 async function boot() {
   bindEvents();
   try {
-    const [info] = await Promise.all([api("/api/info"), loadProviders(), loadJobs(), loadPresets(), loadWorkflows(), loadMcpServers()]);
+    const [info] = await Promise.all([api("/api/info"), loadProviders(), loadJobs(), loadPresets(), loadWorkflows(), loadMcpServers(), loadWorktrees()]);
     state.info = info;
     $("cwd").value = info.cwd;
     $("allowedRoots").textContent = `Allowed roots: ${info.allowed_roots.join(", ")}`;
@@ -100,6 +100,7 @@ function bindEvents() {
   $("saveOverlayBtn").addEventListener("click", saveSchemaOverlay);
   $("addWfBtn").addEventListener("click", createWorkflow);
   $("addMcpBtn").addEventListener("click", createMcpServer);
+  $("addWtBtn").addEventListener("click", createWorktree);
   $("probeButton").addEventListener("click", () => inspectProvider(false));
   $("saveProvider").addEventListener("click", () => inspectProvider(true));
   ["cwd", "positionals", "prompt", "rawArgs", "environment", "confirmation", "timeoutSeconds"].forEach(id => {
@@ -698,6 +699,37 @@ async function createMcpServer() {
     });
     await loadMcpServers();
     toast(`MCP Server "${name}" registered`);
+  } catch (error) { toast(error.message, true); }
+}
+
+async function loadWorktrees() {
+  try {
+    const data = await api("/api/worktrees");
+    if (!data.worktrees?.length) {
+      $("worktreeList").innerHTML = '<p class="muted">No Git worktrees active.</p>';
+      return;
+    }
+    $("worktreeList").innerHTML = data.worktrees.map(wt => `
+      <div class="job-row-wrap">
+        <div class="job-row">
+          <span class="badge ${wt.status === "active" ? "running" : "neutral"}">${escapeHtml(wt.status)}</span>
+          <strong>${escapeHtml(wt.branch)}</strong>
+          <code>${escapeHtml(wt.path)}</code>
+        </div>
+      </div>`).join("");
+  } catch (error) { toast(error.message, true); }
+}
+
+async function createWorktree() {
+  const branch = prompt("Enter branch for worktree:", `feature/task-${Date.now().toString(36)}`);
+  if (!branch) return;
+  try {
+    const res = await api("/api/worktrees", {
+      method: "POST",
+      body: JSON.stringify({ branch }),
+    });
+    await loadWorktrees();
+    toast(`Created worktree at "${res.path}"`);
   } catch (error) { toast(error.message, true); }
 }
 

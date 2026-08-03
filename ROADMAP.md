@@ -24,7 +24,7 @@
 ## v3.0 — Workflow platform
 
 - [x] Durable workflow engine with dependencies and approval gates
-- [ ] Git worktree isolation per execution
+- [x] Git worktree isolation per execution
 - [ ] GitHub pull-request integration
 - [x] MCP server and tool manager
 - [ ] PostgreSQL and queue adapters
