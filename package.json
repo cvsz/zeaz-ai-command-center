@@ -1,0 +1,29 @@
+{
+  "name": "zeaz-ai-command-center",
+  "version": "2.1.0",
+  "description": "Secure provider-agnostic web command builder generated from AI CLI help output",
+  "main": "server.py",
+  "scripts": {
+    "start": "python3 server.py",
+    "test": "pytest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cvsz/zeaz-ai-command-center.git"
+  },
+  "keywords": [
+    "ai",
+    "cli",
+    "codex",
+    "claude",
+    "gemini",
+    "ollama",
+    "command-builder"
+  ],
+  "author": "ZEAZDEV",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/cvsz/zeaz-ai-command-center/issues"
+  },
+  "homepage": "https://github.com/cvsz/zeaz-ai-command-center#readme"
+}
