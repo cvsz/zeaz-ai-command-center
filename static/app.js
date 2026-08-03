@@ -11,17 +11,12 @@ const state = {
   commandPath: [],
   activeJob: null,
   outputOffset: 0,
-  pollTimer: null,
+  streamController: null,
   elapsedTimer: null,
   startedAt: null,
 };
 
 function token() {
-  const query = new URLSearchParams(location.search).get("token");
-  if (query) {
-    sessionStorage.setItem("panel_token", query);
-    history.replaceState({}, "", location.pathname);
-  }
   return sessionStorage.getItem("panel_token") || "";
 }
 
@@ -79,6 +74,7 @@ async function boot() {
     state.info = info;
     $("cwd").value = info.cwd;
     $("allowedRoots").textContent = `Allowed roots: ${info.allowed_roots.join(", ")}`;
+    $("runtimeInfo").textContent = `v${info.version} · ${info.parser} · ${info.environment_policy}`;
   } catch (error) {
     toast(error.message, true);
   }
@@ -99,7 +95,7 @@ function bindEvents() {
   $("refreshJobs").addEventListener("click", loadJobs);
   $("probeButton").addEventListener("click", () => inspectProvider(false));
   $("saveProvider").addEventListener("click", () => inspectProvider(true));
-  ["cwd", "positionals", "prompt", "rawArgs", "environment", "confirmation"].forEach(id => {
+  ["cwd", "positionals", "prompt", "rawArgs", "environment", "confirmation", "timeoutSeconds"].forEach(id => {
     $(id).addEventListener("input", updatePreview);
   });
 }
@@ -153,6 +149,7 @@ async function selectProvider(providerId, refresh = false) {
     state.schemaCache.set("", schema);
     $("providerStatus").textContent = provider.name;
     $("providerVersion").textContent = info.version || info.resolved;
+    if (info.fingerprint_changed) toast("Provider binary changed since registration; review its fingerprint", true);
     $("providerDot").className = "status-dot online";
     $("pageTitle").textContent = `${provider.name} Command Builder`;
     $("pageSubtitle").textContent = schema.description || `Generated from ${provider.executable} --help`;
@@ -249,6 +246,9 @@ function renderOptions(containerId, options, scope) {
     head.innerHTML = `<code>${escapeHtml(option.spec)}</code>${option.risk !== "normal" ? `<span class="mini-risk">${escapeHtml(option.risk)}</span>` : ""}`;
     const description = document.createElement("small");
     description.textContent = option.description || "No description detected.";
+    if (option.default !== null && option.default !== undefined) description.textContent += ` Default: ${option.default}.`;
+    if (option.environment) description.textContent += ` Env: ${option.environment}.`;
+    if (option.deprecated) label.classList.add("deprecated-option");
     let control;
     if (!option.takes_value) {
       control = document.createElement("input");
@@ -362,6 +362,7 @@ function buildPayload() {
     prompt: $("prompt").value,
     environment: parseEnvironment(),
     confirmation: $("confirmation").value,
+    timeout_seconds: $("timeoutSeconds").value ? Number($("timeoutSeconds").value) : undefined,
   };
 }
 
@@ -379,7 +380,7 @@ async function runCommand() {
     $("stopButton").disabled = false;
     setStatus("queued");
     state.elapsedTimer = setInterval(updateElapsed, 1000);
-    pollJob();
+    streamJob(job.id);
   } catch (error) {
     toast(error.message, true);
   }
@@ -395,33 +396,64 @@ function updateElapsed() {
   $("elapsed").textContent = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-async function pollJob() {
-  if (!state.activeJob) return;
+async function streamJob(jobId) {
+  state.streamController?.abort();
+  const controller = new AbortController();
+  state.streamController = controller;
   try {
-    const job = await api(`/api/jobs/${state.activeJob}?offset=${state.outputOffset}`);
-    if (job.output_truncated) $("terminal").textContent += "\n[command-center] Earlier output was truncated.\n";
-    if (job.output) {
-      $("terminal").textContent += job.output;
-      $("terminal").scrollTop = $("terminal").scrollHeight;
+    const headers = { Accept: "text/event-stream" };
+    const auth = token();
+    if (auth) headers.Authorization = `Bearer ${auth}`;
+    const response = await fetch(`/api/jobs/${jobId}/events?offset=${state.outputOffset}`, { headers, signal: controller.signal });
+    if (!response.ok) {
+      let message = `Stream failed (${response.status})`;
+      try { message = (await response.json()).error || message; } catch { /* no-op */ }
+      throw new Error(message);
     }
-    state.outputOffset = job.next_offset;
-    setStatus(job.status);
-    if (["queued", "running"].includes(job.status)) {
-      state.pollTimer = setTimeout(pollJob, 550);
-      return;
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let boundary;
+      while ((boundary = buffer.indexOf("\n\n")) >= 0) {
+        const block = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        const dataLines = block.split("\n").filter(line => line.startsWith("data:")).map(line => line.slice(5).trimStart());
+        if (!dataLines.length) continue;
+        handleJobSnapshot(JSON.parse(dataLines.join("\n")));
+      }
     }
-    if (job.error) $("terminal").textContent += `\n[command-center] ${job.error}\n`;
-    $("terminal").textContent += `\n[command-center] Finished: status=${job.status}, exit=${job.return_code ?? "n/a"}\n`;
-    finishActiveJob();
-    loadJobs();
   } catch (error) {
-    toast(error.message, true);
-    state.pollTimer = setTimeout(pollJob, 1500);
+    if (error.name !== "AbortError") {
+      toast(error.message, true);
+      if (state.activeJob === jobId) {
+        try { handleJobSnapshot(await api(`/api/jobs/${jobId}?offset=${state.outputOffset}`)); } catch { /* preserve current output */ }
+      }
+    }
   }
 }
 
+function handleJobSnapshot(job) {
+  if (job.output_truncated) $("terminal").textContent += "\n[command-center] Earlier output was truncated.\n";
+  if (job.output) {
+    $("terminal").textContent += job.output;
+    $("terminal").scrollTop = $("terminal").scrollHeight;
+  }
+  state.outputOffset = job.next_offset;
+  setStatus(job.status);
+  if (["queued", "running", "stopping"].includes(job.status)) return;
+  if (job.error) $("terminal").textContent += `\n[command-center] ${job.error}\n`;
+  $("terminal").textContent += `\n[command-center] Finished: status=${job.status}, exit=${job.return_code ?? "n/a"}\n`;
+  finishActiveJob();
+  loadJobs();
+}
+
 function finishActiveJob() {
-  clearTimeout(state.pollTimer);
+  state.streamController?.abort();
+  state.streamController = null;
   clearInterval(state.elapsedTimer);
   state.activeJob = null;
   $("runButton").disabled = !state.provider;
@@ -444,13 +476,17 @@ async function loadJobs() {
       return;
     }
     $("jobHistory").innerHTML = data.jobs.map(job => `
-      <button class="job-row" data-job-id="${job.id}">
-        <span class="badge ${job.status}">${escapeHtml(job.status)}</span>
-        <strong>${escapeHtml(job.provider_id)}</strong>
-        <code>${escapeHtml(job.argv.map(quoteArg).join(" "))}</code>
-        <span>${new Date(job.created_at * 1000).toLocaleString()}</span>
-      </button>`).join("");
+      <div class="job-row-wrap">
+        <button class="job-row" data-job-id="${job.id}">
+          <span class="badge ${job.status}">${escapeHtml(job.status)}</span>
+          <strong>${escapeHtml(job.provider_id)}</strong>
+          <code>${escapeHtml(job.argv.map(quoteArg).join(" "))}</code>
+          <span>${new Date(job.created_at * 1000).toLocaleString()}</span>
+        </button>
+        ${["succeeded", "failed", "stopped", "timed_out", "orphaned"].includes(job.status) ? `<button class="icon-button delete-job" data-delete-job="${job.id}" title="Delete job" aria-label="Delete job ${job.id}">×</button>` : ""}
+      </div>`).join("");
     document.querySelectorAll("[data-job-id]").forEach(row => row.addEventListener("click", () => openHistoricalJob(row.dataset.jobId)));
+    document.querySelectorAll("[data-delete-job]").forEach(button => button.addEventListener("click", () => deleteJob(button.dataset.deleteJob)));
   } catch (error) { toast(error.message, true); }
 }
 
@@ -460,6 +496,15 @@ async function openHistoricalJob(id) {
     $("terminal").textContent = `$ ${job.argv.map(quoteArg).join(" ")}\n\n${job.output || ""}\n[command-center] status=${job.status}, exit=${job.return_code ?? "n/a"}\n`;
     $("jobId").textContent = `Historical job ${job.id}`;
     setStatus(job.status);
+  } catch (error) { toast(error.message, true); }
+}
+
+async function deleteJob(id) {
+  if (!confirm(`Delete job ${id} from history?`)) return;
+  try {
+    await api(`/api/jobs/${id}`, { method: "DELETE" });
+    await loadJobs();
+    toast(`Deleted job ${id}`);
   } catch (error) { toast(error.message, true); }
 }
 

@@ -1,10 +1,50 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "ai-cli-command-center"
-version = "2.0.0"
+name = "zeaz-ai-command-center"
+version = "2.1.0"
 requires-python = ">=3.10"
-description = "Provider-agnostic web command builder generated from AI CLI help output"
+description = "Secure provider-agnostic web command builder generated from AI CLI help output"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "ZEAZDEV"}]
+keywords = ["ai", "cli", "codex", "claude", "gemini", "ollama", "command-builder"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: User Interfaces",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<10",
+  "ruff>=0.8,<1",
+]
+
+[project.urls]
+Homepage = "https://github.com/cvsz/zeaz-ai-command-center"
+Repository = "https://github.com/cvsz/zeaz-ai-command-center"
+Issues = "https://github.com/cvsz/zeaz-ai-command-center/issues"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q --strict-markers"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+exclude = [".git", ".venv"]
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]
+
+[tool.setuptools]
+py-modules = ["server", "help_parser", "storage"]

@@ -1,0 +1,28 @@
+services:
+  command-center:
+    build:
+      context: .
+    image: zeaz-ai-command-center:2.1.0
+    restart: unless-stopped
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    ports:
+      - "127.0.0.1:8765:8765"
+    environment:
+      PANEL_TOKEN: ${PANEL_TOKEN:?Set PANEL_TOKEN in your shell or .env}
+      PANEL_ALLOWED_HOSTS: localhost,127.0.0.1
+      PANEL_ALLOWED_ROOTS: /workspace
+      PANEL_DATABASE_PATH: /data/jobs.sqlite3
+      PANEL_MAX_CONCURRENT_JOBS: 2
+    volumes:
+      - command-center-data:/data
+      - ./workspace:/workspace
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+
+volumes:
+  command-center-data:
