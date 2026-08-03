@@ -26,7 +26,7 @@
 
       <div class="sidebar-footer">
         <button id="refreshProviders" class="link-button">Rescan installed CLIs</button>
-        <span>Local-first · shell disabled</span>
+        <span id="runtimeInfo">Local-first · shell disabled</span>
       </div>
     </aside>
 
@@ -100,10 +100,16 @@
             <summary>Confirmation and advanced safety</summary>
             <div class="danger-content">
               <p>Destructive commands require <code>CONFIRM</code>. Dangerous or unsandboxed execution requires <code>I UNDERSTAND</code>.</p>
-              <label class="field">
-                <span>Confirmation text</span>
-                <input id="confirmation" autocomplete="off" placeholder="CONFIRM or I UNDERSTAND">
-              </label>
+              <div class="form-grid compact">
+                <label class="field">
+                  <span>Confirmation text</span>
+                  <input id="confirmation" autocomplete="off" placeholder="CONFIRM or I UNDERSTAND">
+                </label>
+                <label class="field">
+                  <span>Timeout (seconds)</span>
+                  <input id="timeoutSeconds" type="number" min="1" step="1" placeholder="Server default">
+                </label>
+              </div>
             </div>
           </details>
 

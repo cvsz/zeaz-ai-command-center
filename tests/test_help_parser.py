@@ -68,3 +68,42 @@ def test_parse_commander_style_help():
     assert len(schema["commands"]) == 2
     assert len(schema["options"]) == 2
     assert schema["options"][0]["flag"] == "--model"
+
+
+def test_parse_defaults_environment_deprecation_and_global_scope():
+    schema = parse_help(
+        """Example CLI
+Usage: example [OPTIONS] COMMAND
+
+Global Options:
+  --region <REGION>  Region to use [env: EXAMPLE_REGION] [default: eu-west-1]
+  --old              Deprecated compatibility mode
+
+Commands:
+  deploy <FILE>      Deploy a file
+""",
+        executable="example",
+    )
+    region = next(item for item in schema["options"] if item["flag"] == "--region")
+    assert region["default"] == "eu-west-1"
+    assert region["environment"] == "EXAMPLE_REGION"
+    assert region["scope"] == "global"
+    assert next(item for item in schema["options"] if item["flag"] == "--old")["deprecated"] is True
+    assert schema["commands"][0]["arguments"][0]["name"] == "FILE"
+    assert schema["parser"] == "heuristic-v3"
+
+
+def test_parse_negatable_and_brace_choices():
+    schema = parse_help(
+        """Tool
+Options:
+  --[no-]color       Toggle colors
+  --format {text,json,yaml}  Output format
+""",
+        executable="tool",
+    )
+    color = next(item for item in schema["options"] if item["flag"] == "--color")
+    assert color["negatable"] is True
+    assert color["flags"] == ["--color", "--no-color"]
+    output = next(item for item in schema["options"] if item["flag"] == "--format")
+    assert output["choices"] == ["text", "json", "yaml"]

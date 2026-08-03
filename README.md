@@ -1,49 +1,61 @@
-# AI CLI Command Center
+# ZEAZ AI Command Center
 
-A local web control panel that generates a structured command builder from any installed AI CLI's `--help` output.
+A secure local web control panel that discovers installed AI command-line tools, parses their `--help` output, generates structured command builders, executes argv without a shell, and keeps durable job history.
 
-Instead of hard-coding one provider, the server inspects the executable, parses commands/options/arguments, follows nested subcommands, and renders matching controls in the browser.
+It supports OpenAI Codex, Claude Code, Gemini CLI, Qwen Code, Aider, OpenCode, Goose, Ollama, `llm`, and custom executables without hard-coding provider-specific command trees.
 
 ## Highlights
 
-- Provider-agnostic: Codex, Claude Code, Gemini CLI, Qwen Code, Aider, OpenCode, Goose, Ollama, `llm`, and custom executables
-- Auto-discovery of known AI CLIs available in `PATH`
-- Custom provider registration from executable name, help arguments, and version arguments
-- Recursive subcommand inspection: `provider command subcommand --help`
-- Generated controls for:
-  - boolean flags
-  - value options
-  - enumerated choices
-  - repeatable and multi-value options
-  - positional arguments
-  - prompts
-  - process-scoped environment overrides
-- Parsed schema export as JSON
-- Live output streaming, cancellation, exit status, and job history
-- `shell=False` for help inspection and job execution
-- Workspace allowlist
-- Confirmation gates for destructive and dangerous execution
-- Localhost-only by default; bearer token required for non-loopback binding
-- Python standard-library runtime with no web framework dependency
+- Dynamic provider and nested subcommand discovery
+- Heuristic parser for Clap, Cobra, Commander, Click/Typer, argparse, Symfony-style, and hand-written help
+- Generated fields for flags, values, choices, defaults, environment hints, repeatable options, positionals, and prompts
+- Direct `subprocess` argv execution with `shell=False`
+- Workspace allowlist, environment allowlist, risk confirmation, and raw-argument policy
+- SHA-256 provider binary fingerprinting and change warnings
+- Durable SQLite job history with restart recovery
+- Server-Sent Event output streaming, cancellation, timeout, and process-group cleanup
+- Sensitive argv redaction and process-environment output redaction
+- Bearer header authentication, Host validation, same-origin mutation checks, rate limiting, and security headers
+- Health, readiness, Prometheus metrics, and structured JSON logs
+- Rootless Docker image, hardened systemd user service, CI, CodeQL, and Dependabot
+- Python standard-library runtime with no web-framework dependency
 
-## How generation works
+## Architecture
 
-1. Resolve an executable from `PATH`.
-2. Run `<provider> --help` with a short timeout and no shell.
-3. Parse `Usage`, `Commands`, `Options`, `Flags`, and `Arguments` sections.
-4. Infer field types from patterns such as `<MODEL>`, `[FILE]`, `...`, and `possible values`.
-5. When a command is selected, run `<provider> <command> --help` and generate the next layer.
-6. Build an argv array from structured values and launch it directly with `subprocess.Popen(..., shell=False)`.
+```text
+AI CLI --help
+    │
+    ▼
+heuristic-v3 parser ──► generated browser controls
+                              │
+                              ▼
+structured JSON request ──► validated argv list
+                              │
+                              ▼
+                     subprocess shell=False
+                              │
+                  ┌───────────┴───────────┐
+                  ▼                       ▼
+            SSE live output        SQLite durable jobs
+```
 
-The parser is heuristic because CLI help text has no universal standard. The raw help and generated schema are always visible in the panel for inspection.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md).
+
+## Requirements
+
+- Python 3.10 or newer
+- SQLite 3.24 or newer through Python's `sqlite3`
+- One or more AI CLI executables available in `PATH`
+- Linux/macOS for process-group signaling; Ubuntu is the primary deployment target
 
 ## Install on Ubuntu
 
 ```bash
-unzip ai-cli-command-center-v2.0.0.zip
-cd ai-cli-command-center
+git clone https://github.com/cvsz/zeaz-ai-command-center.git
+cd zeaz-ai-command-center
 chmod +x install.sh start.sh uninstall.sh
-./install.sh --service --port=8765
+make validate
+./install.sh --service --host=127.0.0.1 --port=8765
 ```
 
 Check the service:
@@ -59,7 +71,7 @@ Open locally:
 http://127.0.0.1:8765
 ```
 
-For a remote server, use an SSH tunnel from your workstation:
+For a remote server, keep the service on loopback and use an SSH tunnel:
 
 ```bash
 ssh -L 8765:127.0.0.1:8765 cvsz@zeaz-platform
@@ -70,12 +82,13 @@ Then open `http://127.0.0.1:8765` on the workstation.
 ## Run without installation
 
 ```bash
+cp .env.example .env
 ./start.sh --host 127.0.0.1 --port 8765
 ```
 
-## Add any AI provider
+## Add any AI CLI provider
 
-In the UI, select **Inspect provider --help** and enter:
+Open **Inspect provider --help** and enter:
 
 ```text
 Executable: my-ai-cli
@@ -83,19 +96,15 @@ Help arguments: --help
 Version arguments: --version
 ```
 
-The executable must be installed in `PATH`. Custom absolute paths are intentionally disabled by default. To permit them:
-
-```bash
-export PANEL_ALLOW_ABSOLUTE_BINARIES=1
-```
-
-A custom provider is stored in:
+The executable must be in `PATH`. Absolute paths are disabled by default. A custom provider is stored in:
 
 ```text
 ~/.config/ai-cli-command-center/providers.json
 ```
 
-Example registry entry:
+Registration records the executable SHA-256. The provider status API warns if the binary changes later.
+
+Example provider registry:
 
 ```json
 {
@@ -105,75 +114,91 @@ Example registry entry:
       "name": "My AI CLI",
       "executable": "my-ai",
       "help_args": ["--help"],
-      "version_args": ["--version"]
+      "version_args": ["--version"],
+      "registered_fingerprint": {
+        "sha256": "..."
+      }
     }
   ]
 }
 ```
 
-## Supported help layouts
+## Help generation
 
-The parser targets common layouts produced by:
+The server:
 
-- Rust Clap
-- Node Commander
-- Python argparse
-- Click and Typer
-- Go Cobra
-- Similar hand-written command help
+1. Resolves the executable from `PATH`.
+2. Rejects world-writable executables by default.
+3. Runs `<provider> --help` with a timeout and output limit.
+4. Parses usage, commands, options, arguments, choices, defaults, aliases, environment hints, deprecation, and risk markers.
+5. Follows nested selections by running `<provider> <command> ... --help`.
+6. Caches generated schemas for five minutes.
+7. Keeps raw help in every schema for inspection and export.
 
-Examples it recognizes:
+Help text has no universal standard, so generated schemas are heuristic rather than authoritative. Review the argv preview before execution.
+
+## Durable jobs
+
+SQLite state defaults to:
 
 ```text
-Commands:
-  exec       Run non-interactively
-  review     Review code
+~/.local/state/ai-cli-command-center/jobs.sqlite3
 ```
+
+Persisted fields include redacted argv, timestamps, status, return code, risk, errors, timeout, and bounded output. Environment values are never stored. Active records become `orphaned` after a server restart rather than being resumed unsafely.
+
+Output streams over:
 
 ```text
-Options:
-  -m, --model <MODEL>     Select model
-  --search                Enable search
-  -s, --sandbox <MODE>    [possible values: read-only, workspace-write]
+GET /api/jobs/{job_id}/events?offset=0
 ```
 
-## Safety model
+The UI falls back to a final snapshot if a stream disconnects.
 
-The panel is a local command launcher, not a security sandbox.
+## Security model
 
-Controls included:
+The application is a command launcher, not a complete sandbox.
 
-- No raw shell execution
-- No command interpolation
-- Executables resolved before launch
-- Command paths restricted to simple command tokens
-- Request size, help output, process output, and runtime limits
-- Workspace roots restricted to the user's home and launch directory by default
-- Dangerous flags require `I UNDERSTAND`
+Default controls:
+
+- Loopback binding
+- Bearer header required for non-loopback exposure
+- Query-string tokens rejected
+- Host-header allowlist and cross-site mutation rejection
+- No shell interpolation or expansion
+- Canonical allowed workspace roots
+- Exact/prefix environment allowlist with dangerous loader variables blocked
+- World-writable provider binaries rejected
 - Destructive commands require `CONFIRM`
-- Environment override values are not returned in job history
-- Non-loopback binding is refused without a token
+- Dangerous/unsandboxed commands require `I UNDERSTAND`
+- Request, help, output, runtime, retention, concurrency, and rate limits
+- Sensitive option values redacted from job history
+- Environment override values omitted from history and redacted from output where detected
+- CSP, frame denial, no-sniff, referrer, and permissions headers
+- Generic internal errors paired with request IDs in structured logs
 
-To define workspace roots explicitly:
+For autonomous or untrusted workloads, run providers inside an external VM/container sandbox and use disposable workspaces.
+
+## Environment policy
+
+Allowed by default:
+
+- Common AI provider prefixes such as `OPENAI_`, `ANTHROPIC_`, `GOOGLE_`, `GEMINI_`, `OLLAMA_`, `HF_`, `AZURE_`, `AWS_`, `OPENROUTER_`, and others
+- Standard proxy and CA variables
+
+Add an exact key:
 
 ```bash
-export PANEL_ALLOWED_ROOTS=/home/cvsz:/srv/projects
+export PANEL_ENV_ALLOWLIST=MY_PROVIDER_TOKEN,MY_REGION
 ```
 
-To remove the workspace restriction completely—not recommended:
+Add a prefix:
 
 ```bash
-export PANEL_ALLOW_ANY_CWD=1
+export PANEL_ENV_PREFIX_ALLOWLIST=ZEAZ_,CUSTOM_AI_
 ```
 
-To expose the server on a network interface:
-
-```bash
-export PANEL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
-./start.sh --host 0.0.0.0 --port 8765
-```
-
-Use a reverse proxy with TLS and keep the bearer token private.
+Dangerous variables such as `LD_PRELOAD`, `BASH_ENV`, `NODE_OPTIONS`, `PYTHONPATH`, and `GIT_SSH_COMMAND` remain blocked even when broad environment mode is enabled.
 
 ## Configuration
 
@@ -181,68 +206,96 @@ Use a reverse proxy with TLS and keep the bearer token private.
 |---|---:|---|
 | `PANEL_HOST` | `127.0.0.1` | Bind address |
 | `PANEL_PORT` | `8765` | HTTP port |
-| `PANEL_TOKEN` | empty | API bearer token |
-| `PANEL_ALLOWED_ROOTS` | home + launch directory | Allowed working roots |
+| `PANEL_TOKEN` | empty | Bearer token; mandatory off loopback |
+| `PANEL_ALLOWED_HOSTS` | loopback hosts | Accepted Host values |
+| `PANEL_ALLOWED_ROOTS` | home + launch directory | Writable workspace boundary |
 | `PANEL_ALLOW_ANY_CWD` | `0` | Disable workspace restriction |
-| `PANEL_ALLOW_ABSOLUTE_BINARIES` | `0` | Permit custom absolute executable paths |
+| `PANEL_ALLOW_ABSOLUTE_BINARIES` | `0` | Permit provider absolute paths |
+| `PANEL_ALLOW_WORLD_WRITABLE_BINARIES` | `0` | Permit unsafe executable ownership mode |
+| `PANEL_ALLOW_RAW_ARGS` | `1` | Allow advanced argv items not parsed from help |
+| `PANEL_ALLOW_ANY_ENV` | `0` | Allow environment keys except hard denylist |
+| `PANEL_ENV_ALLOWLIST` | empty | Extra exact environment names |
+| `PANEL_ENV_PREFIX_ALLOWLIST` | empty | Extra environment prefixes |
+| `PANEL_DATABASE_PATH` | XDG state path | SQLite database |
+| `PANEL_MAX_CONCURRENT_JOBS` | `4` | Simultaneous provider processes |
+| `PANEL_JOB_TIMEOUT_SECONDS` | `21600` | Default job timeout |
+| `PANEL_MAX_JOB_TIMEOUT_SECONDS` | `86400` | Maximum user-selected timeout |
+| `PANEL_MAX_RETAINED_JOBS` | `500` | Durable history count |
+| `PANEL_JOB_RETENTION_DAYS` | `30` | Terminal-job retention |
+| `PANEL_MAX_OUTPUT_BYTES` | `8388608` | Output retained per job |
 | `PANEL_HELP_TIMEOUT_SECONDS` | `20` | Help inspection timeout |
-| `PANEL_JOB_TIMEOUT_SECONDS` | `21600` | Maximum job runtime |
 | `PANEL_MAX_HELP_BYTES` | `2097152` | Help output cap |
-| `PANEL_MAX_OUTPUT_BYTES` | `8388608` | Retained job output cap |
+| `PANEL_RATE_LIMIT_PER_MINUTE` | `240` | API requests per source IP |
+| `PANEL_LOG_FORMAT` | `json` | `json` or `text` |
+| `PANEL_ENABLE_HSTS` | `0` | Add HSTS behind HTTPS-only proxy |
 
-See `.env.example` for a ready-to-copy template.
+See [.env.example](.env.example).
 
-## API overview
+## API and operations
 
 ```text
+GET    /healthz
+GET    /readyz
 GET    /api/info
+GET    /api/metrics
 GET    /api/providers
 POST   /api/providers/probe
 POST   /api/providers
 DELETE /api/providers/{id}
 GET    /api/providers/{id}/info
-GET    /api/providers/{id}/schema?command=exec&command=subcommand
+GET    /api/providers/{id}/schema
 POST   /api/jobs
 GET    /api/jobs
-GET    /api/jobs/{id}?offset=0
+GET    /api/jobs/{id}
+GET    /api/jobs/{id}/events
 POST   /api/jobs/{id}/stop
+DELETE /api/jobs/{id}
 ```
 
-Example probe:
+Detailed API documentation is in [docs/API.md](docs/API.md) and [openapi.yaml](openapi.yaml).
+
+## Docker
+
+The supplied container is rootless and read-only. It does not bundle provider CLIs.
 
 ```bash
-curl -sS http://127.0.0.1:8765/api/providers/probe \
-  -H 'Content-Type: application/json' \
-  -d '{"executable":"codex","help_args":"--help","version_args":"--version"}'
+mkdir -p workspace
+export PANEL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+docker compose up --build -d
 ```
 
-## Validate the source
+Build a derived image to install the required AI CLI providers.
 
-Runtime has no third-party Python dependencies. Tests use `pytest`.
+## Validation
 
 ```bash
-python3 -m pip install --user pytest
-make check
-make test
+python3 -m pip install --user pytest ruff
+make validate
 ```
 
-Validation coverage includes:
+Validation covers parser formats and metadata, structured argv, risk gates, environment policy, secret redaction, SQLite persistence and orphan recovery, HTTP authentication, Host/origin security, Python/JavaScript/Bash syntax, and container build in CI.
 
-- Codex/Clap-style parsing
-- Commander-style parsing
-- choices and repeatable options
-- custom provider probing
-- structured argv generation
-- destructive and dangerous confirmation gates
-- Python, JavaScript, and shell syntax checks
-
-## Upgrade from Codex Control Panel v1
-
-The v2 application uses a new service and installation directory, so it can be tested alongside v1.
+## Upgrade from v2.0
 
 ```bash
-systemctl --user disable --now codex-control-panel.service 2>/dev/null || true
-./install.sh --service --port=8765
+git pull --ff-only
+make validate
+./install.sh --service --host=127.0.0.1 --port=8765
 ```
 
-The new package name and service are both `ai-cli-command-center`.
+The installer backs up the previous application directory. v2.1 creates durable state under the XDG state directory. The existing provider registry remains compatible. Query-string token links are intentionally no longer accepted; enter the token when prompted or send it as an Authorization header.
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [API](docs/API.md)
+- [Deployment](docs/DEPLOYMENT.md)
+- [Threat model](docs/THREAT-MODEL.md)
+- [Security policy](SECURITY.md)
+- [Roadmap](ROADMAP.md)
+- [Contributing](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
+
+## License
+
+MIT

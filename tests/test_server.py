@@ -92,3 +92,39 @@ def test_probe_custom_provider(tmp_path, monkeypatch):
     assert result["version"] == "sample-ai 1.2.3"
     assert result["schema"]["commands"][0]["name"] == "run"
     assert result["schema"]["options"][0]["flag"] == "--model"
+
+
+def test_environment_policy_blocks_loader_injection(monkeypatch):
+    from server import validate_environment
+
+    monkeypatch.delenv("PANEL_ALLOW_ANY_ENV", raising=False)
+    with pytest.raises(ValueError, match="not allowed"):
+        validate_environment({"LD_PRELOAD": "/tmp/evil.so"})
+    assert validate_environment({"OPENAI_API_KEY": "secret-value"}) == {"OPENAI_API_KEY": "secret-value"}
+
+
+def test_redact_argv_sensitive_values():
+    from server import redact_argv
+
+    assert redact_argv(["tool", "--api-key", "abc123", "--token=xyz", "run"]) == [
+        "tool", "--api-key", "[REDACTED]", "--token=[REDACTED]", "run"
+    ]
+
+
+def test_job_output_redaction_across_chunk_boundaries():
+    from server import Job
+
+    job = Job(
+        id="a" * 12,
+        provider_id="test",
+        argv=["echo"],
+        display_argv=["echo"],
+        cwd="/tmp",
+        created_at=0,
+        redaction_values=[b"super-secret-token"],
+    )
+    job.append(b"prefix super-sec")
+    job.append(b"ret-token suffix", final=True)
+    snapshot = job.snapshot()
+    assert "super-secret-token" not in snapshot["output"]
+    assert "[REDACTED]" in snapshot["output"]

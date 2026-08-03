@@ -1,0 +1,220 @@
+openapi: 3.1.0
+info:
+  title: ZEAZ AI Command Center API
+  version: 2.1.0
+  description: Provider discovery, generated CLI schemas, durable jobs, and streamed process output.
+servers:
+  - url: http://127.0.0.1:8765
+security:
+  - bearerAuth: []
+paths:
+  /healthz:
+    get:
+      security: []
+      summary: Liveness probe
+      responses:
+        "200":
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /readyz:
+    get:
+      security: []
+      summary: Readiness probe
+      responses:
+        "200": {description: Service and SQLite are ready}
+        "503": {description: Service is not ready}
+  /api/info:
+    get:
+      summary: Runtime information
+      responses:
+        "200":
+          description: Runtime configuration summary
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /api/providers:
+    get:
+      summary: List providers
+      parameters:
+        - in: query
+          name: all
+          schema: {type: string, enum: ["0", "1"]}
+      responses:
+        "200":
+          description: Provider list
+    post:
+      summary: Inspect and register a custom provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ProviderProbe"}
+      responses:
+        "201": {description: Provider registered}
+  /api/providers/probe:
+    post:
+      summary: Inspect a provider without saving it
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ProviderProbe"}
+      responses:
+        "200": {description: Provider metadata and generated schema}
+  /api/providers/{providerId}/info:
+    get:
+      summary: Provider version and executable fingerprint
+      parameters:
+        - $ref: "#/components/parameters/ProviderId"
+      responses:
+        "200": {description: Provider information}
+  /api/providers/{providerId}/schema:
+    get:
+      summary: Generate or retrieve a help schema
+      parameters:
+        - $ref: "#/components/parameters/ProviderId"
+        - in: query
+          name: command
+          schema: {type: array, items: {type: string}}
+          style: form
+          explode: true
+        - in: query
+          name: refresh
+          schema: {type: string, enum: ["0", "1"]}
+      responses:
+        "200": {description: Parsed CLI schema}
+  /api/jobs:
+    get:
+      summary: List durable jobs
+      responses:
+        "200":
+          description: Jobs without output bodies
+    post:
+      summary: Create a job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CreateJob"}
+      responses:
+        "202":
+          description: Job accepted
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Job"}
+  /api/jobs/{jobId}:
+    get:
+      summary: Read a job and output delta
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+        - in: query
+          name: offset
+          schema: {type: integer, minimum: 0, default: 0}
+      responses:
+        "200":
+          description: Job snapshot
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Job"}
+    delete:
+      summary: Delete a terminal job
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      responses:
+        "200": {description: Deleted}
+        "400": {description: Job is not terminal}
+        "404": {description: Job not found}
+  /api/jobs/{jobId}/events:
+    get:
+      summary: Stream job snapshots with Server-Sent Events
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+        - in: query
+          name: offset
+          schema: {type: integer, minimum: 0, default: 0}
+      responses:
+        "200":
+          description: SSE stream that closes at a terminal state
+          content:
+            text/event-stream:
+              schema: {type: string}
+  /api/jobs/{jobId}/stop:
+    post:
+      summary: Stop a queued or running job
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      responses:
+        "200": {description: Stop initiated}
+        "409": {description: Job is not running}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    ProviderId:
+      in: path
+      name: providerId
+      required: true
+      schema: {type: string, maxLength: 80}
+    JobId:
+      in: path
+      name: jobId
+      required: true
+      schema: {type: string, pattern: "^[a-f0-9]{12}$"}
+  schemas:
+    Health:
+      type: object
+      required: [status, version]
+      properties:
+        status: {type: string, const: ok}
+        version: {type: string}
+    ProviderProbe:
+      type: object
+      required: [executable]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        executable: {type: string}
+        help_args: {type: string, default: --help}
+        version_args: {type: string, default: --version}
+        command_path: {type: array, items: {type: string}}
+    CreateJob:
+      type: object
+      required: [provider_id, cwd]
+      properties:
+        provider_id: {type: string}
+        cwd: {type: string}
+        command_path: {type: array, items: {type: string}}
+        global_options: {type: object, additionalProperties: true}
+        command_options: {type: object, additionalProperties: true}
+        positionals: {type: array, items: {type: string}}
+        raw_args: {type: array, items: {type: string}}
+        prompt: {type: string}
+        environment: {type: object, additionalProperties: {type: string}}
+        confirmation: {type: string}
+        timeout_seconds: {type: integer, minimum: 1}
+    Job:
+      type: object
+      required: [id, provider_id, argv, cwd, created_at, status, risk, output, next_offset]
+      properties:
+        id: {type: string}
+        provider_id: {type: string}
+        argv: {type: array, items: {type: string}, description: Sensitive values are redacted}
+        cwd: {type: string}
+        created_at: {type: number}
+        started_at: {type: [number, "null"]}
+        finished_at: {type: [number, "null"]}
+        status: {type: string, enum: [queued, running, stopping, succeeded, failed, stopped, timed_out, orphaned]}
+        return_code: {type: [integer, "null"]}
+        error: {type: [string, "null"]}
+        risk: {type: string, enum: [normal, destructive, dangerous]}
+        timeout_seconds: {type: integer}
+        output: {type: string}
+        next_offset: {type: integer}
+        output_truncated: {type: boolean}
