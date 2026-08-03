@@ -394,6 +394,11 @@ class ProviderRegistry:
         schema["return_code"] = code
         schema["provider_id"] = provider_id
         schema["provider_name"] = provider["name"]
+        if hasattr(self, "store") and self.store:
+            overlay = self.store.get_overlay(provider_id)
+            if overlay and isinstance(overlay, dict):
+                for key, val in overlay.items():
+                    schema[key] = val
         with self.lock:
             self.schema_cache[key] = (time.time(), schema)
         return schema
@@ -1212,6 +1217,13 @@ class Handler(SimpleHTTPRequestHandler):
                 return
             if parsed.path == "/api/providers":
                 self._send_json(self.app_server.registry.add(self._read_json()), HTTPStatus.CREATED)
+                return
+            if parsed.path.startswith("/api/providers/") and parsed.path.endswith("/overlay"):
+                provider_id = unquote(parsed.path.split("/")[3])
+                overlay = self._read_json()
+                self.app_server.manager.store.save_overlay(provider_id, overlay)
+                self.app_server.registry.schema_cache.clear()
+                self._send_json({"ok": True, "provider_id": provider_id, "overlay": overlay})
                 return
             if parsed.path == "/api/presets":
                 saved = self.app_server.manager.store.save_preset(self._read_json())

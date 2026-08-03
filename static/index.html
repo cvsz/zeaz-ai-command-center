@@ -145,6 +145,14 @@
           </details>
 
           <details class="schema-details">
+            <summary>Schema Correction Overlay Editor</summary>
+            <div style="margin-top:0.5rem;display:flex;gap:0.5rem;">
+              <button id="saveOverlayBtn" class="ghost small">Apply JSON overlay</button>
+            </div>
+            <textarea id="overlayText" rows="4" style="width:100%;margin-top:0.5rem;font-family:monospace;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(255,255,255,0.1);padding:0.5rem;" placeholder='{"description": "Custom provider description override"}'></textarea>
+          </details>
+
+          <details class="schema-details">
             <summary>Parsed help schema</summary>
             <pre id="schemaPreview">No schema loaded.</pre>
           </details>

@@ -108,6 +108,16 @@ class JobStore:
                 """
             )
             connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS schema_overlays (
+                    id TEXT PRIMARY KEY,
+                    provider_id TEXT NOT NULL,
+                    overlay_json TEXT NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+                """
+            )
+            connection.execute(
                 "CREATE INDEX IF NOT EXISTS presets_created_at_idx ON presets(created_at DESC)"
             )
             connection.execute(
@@ -299,6 +309,30 @@ class JobStore:
         with self.lock, self._connect() as connection:
             cursor = connection.execute("DELETE FROM presets WHERE id = ?", (preset_id,))
             return bool(cursor.rowcount)
+
+    def save_overlay(self, provider_id: str, overlay: dict[str, Any]) -> None:
+        now = time.time()
+        with self.lock, self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO schema_overlays (id, provider_id, overlay_json, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    overlay_json = excluded.overlay_json,
+                    updated_at = excluded.updated_at
+                """,
+                (provider_id, provider_id, json.dumps(overlay, ensure_ascii=False), now),
+            )
+
+    def get_overlay(self, provider_id: str) -> dict[str, Any]:
+        with self.lock, self._connect() as connection:
+            row = connection.execute("SELECT overlay_json FROM schema_overlays WHERE provider_id = ?", (provider_id,)).fetchone()
+        if not row:
+            return {}
+        try:
+            return json.loads(row["overlay_json"])
+        except (TypeError, json.JSONDecodeError):
+            return {}
 
     @staticmethod
     def _preset_row_to_record(row: sqlite3.Row) -> dict[str, Any]:

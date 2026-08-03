@@ -19,7 +19,7 @@
 - [x] Presets and favorites
 - [x] Workspace file browser and diff viewer
 - [x] Job retry/clone and downloadable logs
-- [ ] Schema correction overlays
+- [x] Schema correction overlays
 
 ## v3.0 — Workflow platform
 

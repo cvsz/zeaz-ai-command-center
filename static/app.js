@@ -97,6 +97,7 @@ function bindEvents() {
   $("refreshPresets").addEventListener("click", loadPresets);
   $("loadFilesBtn").addEventListener("click", loadWorkspaceFiles);
   $("loadDiffBtn").addEventListener("click", loadGitDiff);
+  $("saveOverlayBtn").addEventListener("click", saveSchemaOverlay);
   $("probeButton").addEventListener("click", () => inspectProvider(false));
   $("saveProvider").addEventListener("click", () => inspectProvider(true));
   ["cwd", "positionals", "prompt", "rawArgs", "environment", "confirmation", "timeoutSeconds"].forEach(id => {
@@ -617,6 +618,22 @@ async function loadGitDiff() {
     $("gitDiffPreview").textContent = data.diff || "No uncommitted git changes detected in workspace.";
   } catch (error) {
     $("gitDiffPreview").textContent = `Error: ${error.message}`;
+  }
+}
+
+async function saveSchemaOverlay() {
+  if (!state.provider) return toast("Select a provider first", true);
+  try {
+    const text = $("overlayText").value.trim();
+    const overlay = text ? JSON.parse(text) : {};
+    await api(`/api/providers/${encodeURIComponent(state.provider.id)}/overlay`, {
+      method: "POST",
+      body: JSON.stringify(overlay),
+    });
+    await selectProvider(state.provider.id, true);
+    toast("Schema correction overlay applied");
+  } catch (error) {
+    toast(`Invalid overlay JSON: ${error.message}`, true);
   }
 }
 
