@@ -11,5 +11,6 @@ venv/
 *.sqlite3-shm
 *.sqlite3-wal
 *.log
-.DS_Store
-*.zip
+dist/
+build/
+*.egg-info/
