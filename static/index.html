@@ -128,15 +128,17 @@
           </div>
         </div>
 
-        <div class="panel terminal-panel">
-          <div class="panel-heading terminal-heading">
-            <div><p class="eyebrow">LIVE OUTPUT</p><h2>Process stream</h2></div>
-            <div class="terminal-actions">
-              <span id="jobStatus" class="badge neutral">Idle</span>
-              <button id="clearTerminal" class="ghost small">Clear</button>
-              <button id="stopButton" class="danger-button small" disabled>Stop</button>
+          <div class="panel terminal-panel">
+            <div class="panel-heading terminal-heading">
+              <div><p class="eyebrow">LIVE OUTPUT</p><h2>Process stream</h2></div>
+              <div class="terminal-actions">
+                <span id="jobStatus" class="badge neutral">Idle</span>
+                <input id="stdinInput" type="text" placeholder="Relay stdin (e.g. y/N)..." style="background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(255,255,255,0.1);padding:0.25rem 0.5rem;font-size:0.8rem;border-radius:4px;width:160px;" />
+                <button id="sendStdinBtn" class="ghost small">Send</button>
+                <button id="clearTerminal" class="ghost small">Clear</button>
+                <button id="stopButton" class="danger-button small" disabled>Stop</button>
+              </div>
             </div>
-          </div>
           <pre id="terminal" aria-live="polite"><span class="muted">Generated command output will appear here.</span></pre>
           <div class="terminal-meta"><span id="jobId">No active job</span><span id="elapsed">00:00</span></div>
 

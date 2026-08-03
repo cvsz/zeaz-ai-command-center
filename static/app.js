@@ -103,6 +103,7 @@ function bindEvents() {
   $("addWtBtn").addEventListener("click", createWorktree);
   $("createPrBtn").addEventListener("click", createPullRequest);
   $("updateBtn").addEventListener("click", updateViaGithub);
+  $("sendStdinBtn").addEventListener("click", sendStdinRelay);
   $("probeButton").addEventListener("click", () => inspectProvider(false));
   $("saveProvider").addEventListener("click", () => inspectProvider(true));
   $("langSelect").addEventListener("change", (e) => applyI18n(e.target.value));
@@ -777,6 +778,21 @@ async function updateViaGithub() {
       toast(`Update failed: ${res.output || res.message}`, true);
     }
   } catch (error) { toast(error.message, true); }
+}
+
+async function sendStdinRelay() {
+  if (!state.activeJobId) return toast("No active running job", true);
+  const input = $("stdinInput").value;
+  try {
+    await api(`/api/jobs/${state.activeJobId}/input`, {
+      method: "POST",
+      body: JSON.stringify({ input }),
+    });
+    toast(`Relayed stdin input "${input}"`);
+    $("stdinInput").value = "";
+  } catch (error) {
+    toast(`Failed to relay stdin: ${error.message}`, true);
+  }
 }
 
 async function inspectProvider(save) {

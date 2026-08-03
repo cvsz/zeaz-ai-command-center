@@ -15,7 +15,7 @@
 ## v2.2 — Interactive operations
 
 - [ ] WebSocket PTY with stdin and terminal resize
-- [ ] Approval prompt relay
+- [x] Approval prompt relay
 - [x] Presets and favorites
 - [x] Workspace file browser and diff viewer
 - [x] Job retry/clone and downloadable logs

@@ -1304,6 +1304,24 @@ class Handler(SimpleHTTPRequestHandler):
                 job = self.app_server.manager.create(self._read_json())
                 self._send_json(job.snapshot(), HTTPStatus.ACCEPTED)
                 return
+            if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/input"):
+                job_id = parsed.path.split("/")[3]
+                user_input = self._read_json().get("input", "")
+                job = self.app_server.manager.get(job_id)
+                if not job or not job.process or job.process.poll() is not None:
+                    self._send_json({"error": "Job is not running or process handle unavailable"}, HTTPStatus.CONFLICT)
+                    return
+                try:
+                    if job.process.stdin:
+                        job.process.stdin.write((user_input + "\n").encode("utf-8"))
+                        job.process.stdin.flush()
+                        self._send_json({"ok": True, "job_id": job_id, "relayed": user_input})
+                        return
+                except Exception as e:
+                    self._send_json({"error": str(e)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+                    return
+                self._send_json({"error": "stdin not writeable"}, HTTPStatus.BAD_REQUEST)
+                return
             if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/stop"):
                 job_id = parsed.path.split("/")[3]
                 if not self.app_server.manager.stop(job_id):
