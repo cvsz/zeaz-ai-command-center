@@ -163,6 +163,16 @@ class JobStore:
                 """
             )
             connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    username TEXT PRIMARY KEY,
+                    password_hash TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'operator',
+                    created_at REAL NOT NULL
+                )
+                """
+            )
+            connection.execute(
                 "CREATE INDEX IF NOT EXISTS presets_created_at_idx ON presets(created_at DESC)"
             )
             connection.execute(
@@ -185,6 +195,7 @@ class JobStore:
             "schema_version": int(value["value"]) if value else None,
             "jobs": int(count),
             "latency_ms": round((time.monotonic() - started) * 1000, 3),
+            "engine": "postgresql" if os.getenv("PANEL_POSTGRES_URL") else "sqlite3",
             "path": str(self.path),
         }
 
@@ -407,6 +418,11 @@ class JobStore:
             result.append({"id": r["id"], "name": r["name"], "steps": steps, "status": r["status"]})
         return result
 
+    def delete_workflow(self, wf_id: str) -> bool:
+        with self.lock, self._connect() as connection:
+            cursor = connection.execute("DELETE FROM workflows WHERE id = ?", (wf_id,))
+            return bool(cursor.rowcount)
+
     def save_mcp_server(self, server: dict[str, Any]) -> dict[str, Any]:
         now = time.time()
         srv_id = server.get("id") or os.urandom(6).hex()
@@ -435,6 +451,11 @@ class JobStore:
             result.append({"id": r["id"], "name": r["name"], "command": r["command"], "args": args, "status": r["status"]})
         return result
 
+    def delete_mcp_server(self, srv_id: str) -> bool:
+        with self.lock, self._connect() as connection:
+            cursor = connection.execute("DELETE FROM mcp_servers WHERE id = ?", (srv_id,))
+            return bool(cursor.rowcount)
+
     def save_worktree(self, wt: dict[str, Any]) -> dict[str, Any]:
         now = time.time()
         wt_id = wt.get("id") or os.urandom(6).hex()
@@ -457,6 +478,11 @@ class JobStore:
             rows = connection.execute("SELECT * FROM worktrees ORDER BY created_at DESC").fetchall()
         return [{"id": r["id"], "path": r["path"], "branch": r["branch"], "status": r["status"]} for r in rows]
 
+    def delete_worktree(self, wt_id: str) -> bool:
+        with self.lock, self._connect() as connection:
+            cursor = connection.execute("DELETE FROM worktrees WHERE id = ?", (wt_id,))
+            return bool(cursor.rowcount)
+
     def save_mfa_secret(self, user_id: str, secret: str, enabled: bool = True) -> None:
         now = time.time()
         with self.lock, self._connect() as connection:
@@ -470,6 +496,32 @@ class JobStore:
                 """,
                 (user_id, secret, 1 if enabled else 0, now),
             )
+
+    def save_user(self, username: str, password_hash: str, role: str = "operator") -> dict[str, Any]:
+        now = time.time()
+        with self.lock, self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO users (username, password_hash, role, created_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(username) DO UPDATE SET
+                    password_hash = excluded.password_hash,
+                    role = excluded.role
+                """,
+                (username, password_hash, role, now),
+            )
+        return {"username": username, "role": role, "created_at": now}
+
+    def get_user(self, username: str) -> dict[str, Any] | None:
+        with self.lock, self._connect() as connection:
+            row = connection.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+        if not row: return None
+        return {"username": row["username"], "password_hash": row["password_hash"], "role": row["role"], "created_at": row["created_at"]}
+
+    def list_users(self) -> list[dict[str, Any]]:
+        with self.lock, self._connect() as connection:
+            rows = connection.execute("SELECT username, role, created_at FROM users ORDER BY created_at ASC").fetchall()
+        return [{"username": r["username"], "role": r["role"], "created_at": r["created_at"]} for r in rows]
 
     def get_mfa_secret(self, user_id: str) -> dict[str, Any] | None:
         with self.lock, self._connect() as connection:

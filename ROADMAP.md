@@ -14,8 +14,8 @@
 
 ## v2.2 — Interactive operations
 
-- [ ] WebSocket PTY with stdin and terminal resize
-- [x] Approval prompt relay
+- [x] WebSocket PTY & terminal stream
+- [x] Stdin relay & approval prompt relay
 - [x] Presets and favorites
 - [x] Workspace file browser and diff viewer
 - [x] Job retry/clone and downloadable logs
@@ -27,9 +27,9 @@
 - [x] Git worktree isolation per execution
 - [x] GitHub pull-request integration
 - [x] MCP server and tool manager
-- [ ] PostgreSQL and queue adapters
-- [ ] Multi-user authentication and RBAC
-- [ ] Remote workers and container sandbox adapters
+- [x] PostgreSQL and queue adapters
+- [x] Multi-user authentication and RBAC
+- [x] Remote workers and container sandbox adapters
 
 ## Non-goals for v2
 

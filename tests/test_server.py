@@ -128,3 +128,37 @@ def test_job_output_redaction_across_chunk_boundaries():
     snapshot = job.snapshot()
     assert "super-secret-token" not in snapshot["output"]
     assert "[REDACTED]" in snapshot["output"]
+
+
+def test_storage_deletion_methods(tmp_path):
+    from storage import JobStore
+    store = JobStore(tmp_path / "test.sqlite3")
+
+    wf = store.save_workflow({"name": "Test WF", "steps": []})
+    assert len(store.list_workflows()) == 1
+    assert store.delete_workflow(wf["id"]) is True
+    assert len(store.list_workflows()) == 0
+
+    mcp = store.save_mcp_server({"name": "Test MCP", "command": "npx", "args": []})
+    assert len(store.list_mcp_servers()) == 1
+    assert store.delete_mcp_server(mcp["id"]) is True
+    assert len(store.list_mcp_servers()) == 0
+
+    wt = store.save_worktree({"path": "/tmp/wt", "branch": "test"})
+    assert len(store.list_worktrees()) == 1
+    assert store.delete_worktree(wt["id"]) is True
+    assert len(store.list_worktrees()) == 0
+
+def test_user_management_storage(tmp_path):
+    from storage import JobStore
+    store = JobStore(tmp_path / "test_users.sqlite3")
+
+    user = store.save_user("admin", "hash123", role="admin")
+    assert user["username"] == "admin"
+    fetched = store.get_user("admin")
+    assert fetched["role"] == "admin"
+    users = store.list_users()
+    assert len(users) == 1
+    assert users[0]["username"] == "admin"
+
+

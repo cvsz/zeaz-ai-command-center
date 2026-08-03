@@ -672,7 +672,18 @@ async function loadWorkflows() {
           <strong>${escapeHtml(wf.name)}</strong>
           <code>${wf.steps.length} steps configured</code>
         </div>
+        <button class="icon-button delete-job" data-delete-workflow="${wf.id}" title="Delete workflow" aria-label="Delete workflow ${wf.id}">×</button>
       </div>`).join("");
+    document.querySelectorAll("[data-delete-workflow]").forEach(button => button.addEventListener("click", () => deleteWorkflow(button.dataset.deleteWorkflow)));
+  } catch (error) { toast(error.message, true); }
+}
+
+async function deleteWorkflow(id) {
+  if (!confirm("Delete workflow?")) return;
+  try {
+    await api(`/api/workflows/${id}`, { method: "DELETE" });
+    await loadWorkflows();
+    toast("Deleted workflow");
   } catch (error) { toast(error.message, true); }
 }
 
@@ -703,7 +714,18 @@ async function loadMcpServers() {
           <strong>${escapeHtml(srv.name)}</strong>
           <code>${escapeHtml(srv.command)} ${escapeHtml(srv.args.join(" "))}</code>
         </div>
+        <button class="icon-button delete-job" data-delete-mcp="${srv.id}" title="Delete MCP server" aria-label="Delete MCP server ${srv.id}">×</button>
       </div>`).join("");
+    document.querySelectorAll("[data-delete-mcp]").forEach(button => button.addEventListener("click", () => deleteMcpServer(button.dataset.deleteMcp)));
+  } catch (error) { toast(error.message, true); }
+}
+
+async function deleteMcpServer(id) {
+  if (!confirm("Delete MCP server registration?")) return;
+  try {
+    await api(`/api/mcp/${id}`, { method: "DELETE" });
+    await loadMcpServers();
+    toast("Deleted MCP server registration");
   } catch (error) { toast(error.message, true); }
 }
 
@@ -734,7 +756,18 @@ async function loadWorktrees() {
           <strong>${escapeHtml(wt.branch)}</strong>
           <code>${escapeHtml(wt.path)}</code>
         </div>
+        <button class="icon-button delete-job" data-delete-worktree="${wt.id}" title="Remove worktree record" aria-label="Remove worktree record ${wt.id}">×</button>
       </div>`).join("");
+    document.querySelectorAll("[data-delete-worktree]").forEach(button => button.addEventListener("click", () => deleteWorktree(button.dataset.deleteWorktree)));
+  } catch (error) { toast(error.message, true); }
+}
+
+async function deleteWorktree(id) {
+  if (!confirm("Remove worktree record?")) return;
+  try {
+    await api(`/api/worktrees/${id}`, { method: "DELETE" });
+    await loadWorktrees();
+    toast("Removed worktree record");
   } catch (error) { toast(error.message, true); }
 }
 

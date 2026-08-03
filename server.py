@@ -821,15 +821,35 @@ class JobManager:
             env.setdefault("TERM", "dumb")
             env.setdefault("NO_COLOR", "1")
             env.setdefault("CLICOLOR", "0")
-            process = subprocess.Popen(
-                job.argv, cwd=job.cwd, env=env, stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=False,
-                start_new_session=True,
-            )
-            job.process = process
-            assert process.stdout is not None
+            exec_argv = list(job.argv)
+            sandbox_driver = os.getenv("PANEL_SANDBOX_DRIVER", "").strip()
+            if sandbox_driver == "bwrap":
+                exec_argv = ["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--unshare-all"] + exec_argv
+            elif sandbox_driver == "docker":
+                exec_argv = ["docker", "run", "--rm", "-v", f"{job.cwd}:{job.cwd}", "-w", job.cwd] + exec_argv
+            use_pty = os.getenv("PANEL_USE_PTY", "0") == "1"
+            if use_pty:
+                import pty
+                master_fd, slave_fd = pty.openpty()
+                process = subprocess.Popen(
+                    exec_argv, cwd=job.cwd, env=env, stdin=slave_fd,
+                    stdout=slave_fd, stderr=slave_fd, shell=False,
+                    start_new_session=True, close_fds=True,
+                )
+                os.close(slave_fd)
+                job.process = process
+                output_stream = os.fdopen(master_fd, "rb")
+            else:
+                process = subprocess.Popen(
+                    exec_argv, cwd=job.cwd, env=env, stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=False,
+                    start_new_session=True,
+                )
+                job.process = process
+                output_stream = process.stdout
+            assert output_stream is not None
             output_queue: queue.Queue[bytes | None] = queue.Queue()
-            reader = threading.Thread(target=self._read_output, args=(process.stdout, output_queue), daemon=True)
+            reader = threading.Thread(target=self._read_output, args=(output_stream, output_queue), daemon=True)
             reader.start()
             deadline = time.monotonic() + job.timeout_seconds
             reader_done = False
@@ -1206,6 +1226,9 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/worktrees":
                 self._send_json({"worktrees": self.app_server.manager.store.list_worktrees()})
                 return
+            if path == "/api/users":
+                self._send_json({"users": self.app_server.manager.store.list_users()})
+                return
             if path == "/api/github/pulls":
                 target_cwd = validate_cwd(parse_qs(parsed.query).get("cwd", [""])[0] or None)
                 code, output = run_capture(["gh", "pr", "list", "--json", "number,title,state,url"], cwd=target_cwd, timeout=10)
@@ -1312,6 +1335,18 @@ class Handler(SimpleHTTPRequestHandler):
                 valid = bool(rec and rec["enabled"] and len(token) == 6)
                 self._send_json({"ok": valid, "verified": valid})
                 return
+            if parsed.path == "/api/users":
+                u_data = self._read_json()
+                username = u_data.get("username", "").strip()
+                password = u_data.get("password", "")
+                role = u_data.get("role", "operator")
+                if not username or not password:
+                    self._send_json({"error": "Username and password required"}, HTTPStatus.BAD_REQUEST)
+                    return
+                pwd_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
+                created = self.app_server.manager.store.save_user(username, pwd_hash, role)
+                self._send_json(created, HTTPStatus.CREATED)
+                return
             if parsed.path == "/api/jobs":
                 job = self.app_server.manager.create(self._read_json())
                 self._send_json(job.snapshot(), HTTPStatus.ACCEPTED)
@@ -1363,6 +1398,27 @@ class Handler(SimpleHTTPRequestHandler):
                     self._send_json({"error": "Preset not found"}, HTTPStatus.NOT_FOUND)
                     return
                 self._send_json({"ok": True, "preset_id": preset_id})
+                return
+            if parsed.path.startswith("/api/workflows/"):
+                wf_id = unquote(parsed.path.split("/")[3])
+                if not self.app_server.manager.store.delete_workflow(wf_id):
+                    self._send_json({"error": "Workflow not found"}, HTTPStatus.NOT_FOUND)
+                    return
+                self._send_json({"ok": True, "workflow_id": wf_id})
+                return
+            if parsed.path.startswith("/api/mcp/"):
+                srv_id = unquote(parsed.path.split("/")[3])
+                if not self.app_server.manager.store.delete_mcp_server(srv_id):
+                    self._send_json({"error": "MCP server not found"}, HTTPStatus.NOT_FOUND)
+                    return
+                self._send_json({"ok": True, "mcp_id": srv_id})
+                return
+            if parsed.path.startswith("/api/worktrees/"):
+                wt_id = unquote(parsed.path.split("/")[3])
+                if not self.app_server.manager.store.delete_worktree(wt_id):
+                    self._send_json({"error": "Worktree record not found"}, HTTPStatus.NOT_FOUND)
+                    return
+                self._send_json({"ok": True, "worktree_id": wt_id})
                 return
             if parsed.path.startswith("/api/jobs/"):
                 job_id = parsed.path.split("/")[3]
