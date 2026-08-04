@@ -75,5 +75,21 @@ def test_store_v3_workflows_and_mcp(tmp_path: Path):
     assert wt["branch"] == "feature/test"
     assert len(store.list_worktrees()) == 1
 
+    ch = store.save_notification_channel({"type": "slack", "name": "Test Slack", "url": "https://hooks.slack.com/test", "events": ["job_finished"]})
+    assert ch["type"] == "slack"
+    assert len(store.list_notification_channels()) == 1
+    assert store.delete_notification_channel(ch["id"]) is True
+    assert len(store.list_notification_channels()) == 0
+
+    entry = store.append_audit("test_action", actor="tester", target_type="job", target_id="abc123", details={"key": "value"})
+    assert entry["action"] == "test_action"
+    assert entry["checksum"] != ""
+    log = store.export_audit_log()
+    assert len(log) >= 1
+    assert log[0]["checksum"] == entry["checksum"]
+    verify = store.verify_audit_chain()
+    assert verify["intact"] is True
+    assert verify["total"] >= 1
+
 
 
