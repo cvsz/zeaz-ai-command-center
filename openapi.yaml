@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: ZEAZ AI Command Center API
-  version: 3.4.1
+  version: 3.4.2
   description: |
     Provider discovery, generated CLI schemas, durable jobs, streamed process output,
     workflows, analytics, notifications, webhooks, API keys, audit logging, and

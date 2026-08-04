@@ -2,6 +2,21 @@
 
 All notable changes are documented here.
 
+
+## [3.4.2] - 2026-08-04
+
+### Added
+
+- Automated release lifecycle validation for source install, safe in-place upgrade, uninstall/purge, wheel/sdist installation, Compose validation, and container startup/health.
+- Console launchers for both the web command center and Windows desktop GUI in Python wheel installations.
+- A single `version.py` release source used by runtime, packaging, installer, Makefile, Docker, and validation tests.
+
+### Fixed
+
+- Runtime version drift (`3.3.0`), Docker/Compose tag drift (`2.1.0`), and missing GUI files in installed and packaged distributions.
+- Installer upgrades now use a staged replacement, unique backups, rollback on replacement failure, and preserve external configuration/state.
+- Build tooling now declares and validates its `build` dependency and verifies the generated wheel in an isolated environment.
+
 ## [3.4.1] - 2026-08-04
 
 ### Fixed

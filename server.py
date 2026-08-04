@@ -3,7 +3,7 @@
 
 The service discovers AI command-line tools, parses ``--help`` output into a
 structured schema, renders command builders, and executes argv arrays with
-``shell=False``. Version 2.1 adds durable jobs, streamed output, hardened HTTP
+``shell=False``. The current release adds durable jobs, streamed output, hardened HTTP
 handling, environment policy, provider fingerprints, and operational health.
 """
 
@@ -40,9 +40,10 @@ from urllib.request import Request, urlopen
 
 from help_parser import PARSER_VERSION, parse_help
 from storage import JobStore, TERMINAL_STATES
+from version import __version__
 
 APP_NAME = "ai-cli-command-center"
-APP_VERSION = "3.3.0"
+APP_VERSION = __version__
 API_VERSION = "v1"
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
