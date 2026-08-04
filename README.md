@@ -6,13 +6,15 @@
 
 Instead of requiring manual command-line typing or maintaining hardcoded CLI definitions, the Command Center automatically scans your OS environment, parses `--help` outputs in real time using a heuristic parser, auto-generates interactive Web UI command builders, and executes commands safely via direct `subprocess` calls (`shell=False`) with live output streaming.
 
+A **Windows 11 Fluent Design GUI** desktop client is also available for full-featured native access to all operations.
+
 ---
 
 ## 🎬 Live Demo & Feature Walkthrough
 
 ```text
  ┌─────────────────────────────────────────────────────────────────────────────────┐
- │ ZEAZ AI COMMAND CENTER v3.0                                  [⚡ Update via GitHub] │
+ │ ZEAZ AI COMMAND CENTER v3.4                                  [⚡ Update via GitHub] │
  ├──────────────────────────┬──────────────────────────────────────────────────────┤
  │ 🤖 PROVIDERS             │ ⚙️ COMMAND BUILDER                                   │
  │  • OpenAI Codex          │  Target Directory: [/home/cvsz/project]               │
@@ -31,6 +33,7 @@ Instead of requiring manual command-line typing or maintaining hardcoded CLI def
 2. **Interactive Builder**: Select options, positional arguments, or prompts in generated UI controls.
 3. **Durable Execution**: Stream live output over SSE, download logs, and monitor execution state in real-time.
 4. **v3.0 Workflows & Sandboxing**: Execute multi-step DAG workflows, manage MCP servers, or spawn ephemeral Git worktrees.
+5. **v3.4 Desktop GUI**: Launch the native Windows 11 Fluent Design client for full-featured desktop access.
 
 ---
 
@@ -43,26 +46,40 @@ python3 server.py --host 127.0.0.1 --port 8765
 ```
 Open `http://127.0.0.1:8765` in your browser.
 
-### Step 2: Selecting an AI Provider
+### Step 2: Desktop GUI (Windows 11 / Linux / macOS)
+Launch the native desktop client:
+```bash
+python3 gui.py
+```
+The GUI connects to the same server API and provides a Windows 11 Fluent Design experience with 15 pages covering all features: Dashboard, Jobs, Workflows, Templates, Presets, Analytics, Providers, Users, API Keys, Webhooks, Notifications, MCP Servers, Audit Log, Scheduler, and Settings.
+
+### Step 3: Selecting an AI Provider
 1. Click any installed AI provider (e.g. **Claude Code**, **OpenAI Codex**, **Gemini CLI**) in the left sidebar.
 2. The panel probes `--help` and renders all available flags, subcommands, and options automatically.
 
-### Step 3: Configuring & Executing Commands
+### Step 4: Configuring & Executing Commands
 1. **Set Working Directory**: Enter the target project path in **Working Directory**.
 2. **Fill Parameters**: Select subcommands, enter prompts, or pass positional arguments.
 3. **Run Command**: Click **Run command** to launch. Output streams in real-time under **Process stream**.
 
-### Step 4: Using v2.2 & v3.0 Advanced Tools
+### Step 5: Using v2.2 & v3.0 Advanced Tools
 - **Presets & Favorites**: Click **Save preset** to save reusable command configurations.
 - **Download Logs**: Click **Download log** in historical job windows to export full terminal output.
 - **Git Diff & File Browser**: Expand **Workspace File Browser** or **Git Diff Viewer** to inspect uncommitted changes.
 - **Workflows & MCP Servers**: Use **+ Workflow**, **+ MCP Server**, or **+ Ephemeral Worktree** under the Workflow Platform section.
 
+### Step 6: Using v3.1–v3.4 Advanced Features
+- **Analytics Dashboard**: View execution duration, success/failure rates, and provider usage at `/api/analytics` or in the GUI Analytics page.
+- **Grafana & Prometheus**: Open `http://127.0.0.1:3000` for pre-built dashboards and alerting rules.
+- **Notifications**: Configure Slack, Discord, or email alerts via `/api/notifications` or the GUI Notifications page.
+- **Scheduled Workflows**: Create calendar-scheduled workflows via `/api/schedules` or the GUI Scheduler page.
+- **API Keys**: Create scoped API keys via `/api/keys` or the GUI API Keys page.
+- **Webhooks**: Configure outgoing webhooks with HMAC-SHA256 signing via `/api/webhooks` or the GUI Webhooks page.
+- **Bulk Operations**: Bulk stop/delete jobs via `/api/jobs/bulk/stop` and `/api/jobs/bulk/delete`.
+
 ---
 
 ## Highlights
-
-- Dynamic provider and nested subcommand discovery
 
 - Dynamic provider and nested subcommand discovery
 - Heuristic parser for Clap, Cobra, Commander, Click/Typer, argparse, Symfony-style, and hand-written help
@@ -77,6 +94,21 @@ Open `http://127.0.0.1:8765` in your browser.
 - Health, readiness, Prometheus metrics, and structured JSON logs
 - Rootless Docker image, hardened systemd user service, CI, CodeQL, and Dependabot
 - Python standard-library runtime with no web-framework dependency
+- **Windows 11 Fluent Design GUI** with 15 pages, live SSE event feed, and full CRUD for all resources
+- **Job analytics** with success/failure rates, duration percentiles, and per-provider breakdowns
+- **Grafana dashboards** and Prometheus alerting rules
+- **Slack, Discord, email notifications** on job/workflow events
+- **Circuit breaker**, rate limiting, and graceful degradation under load
+- **Job retry policies** with configurable backoff (linear, exponential, fixed)
+- **Priority queuing** (urgent, normal, background tiers)
+- **API versioning** with /api/v1/ prefix and X-API-Version header
+- **Scoped API keys** with create, list, revoke, and auth middleware
+- **Outgoing webhooks** with HMAC-SHA256 signing and event filtering
+- **Bulk job operations** and unified SSE event stream
+- **Database backup/restore** with JSON snapshot export/import
+- **Tamper-evident audit log** with SHA-256 chain verification
+- **GitLab and Bitbucket** provider integrations
+- **Calendar-scheduled workflows** with cron support
 
 ## Architecture
 
@@ -95,6 +127,11 @@ structured JSON request ──► validated argv list
                   ┌───────────┴───────────┐
                   ▼                       ▼
             SSE live output        SQLite durable jobs
+                                      │
+                    ┌─────────────────┼─────────────────┐
+                    ▼                 ▼                 ▼
+              Grafana/Prometheus  Notifications     Desktop GUI
+              (v3.1)             (v3.1)            (v3.4)
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md).
@@ -105,6 +142,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/THREAT-MODEL.md](docs
 - SQLite 3.24 or newer through Python's `sqlite3`
 - One or more AI CLI executables available in `PATH`
 - Windows 11 / Linux / macOS (Ubuntu, macOS, Windows 11 fully supported)
+- tkinter (bundled with Python on Windows/macOS; `sudo apt install python3-tk` on Ubuntu)
 
 ## Install on Ubuntu
 
@@ -143,6 +181,23 @@ Then open `http://127.0.0.1:8765` on the workstation.
 cp .env.example .env
 ./start.sh --host 127.0.0.1 --port 8765
 ```
+
+## Desktop GUI
+
+```bash
+python3 gui.py
+```
+
+The GUI connects to the server at `http://127.0.0.1:8765` by default. Configure the server URL and bearer token in the Settings page. Features:
+
+- **Dashboard**: Health stats, load metrics, recent jobs
+- **Jobs**: Create/stop/delete/retry, status filter, bulk operations, output viewer
+- **Workflows, Templates, Presets**: Full CRUD with dialogs
+- **Analytics**: Success/failure rates, duration stats, provider breakdown
+- **Providers**: Circuit breaker, rate limits, health probes
+- **Admin**: Users, API Keys, Webhooks, Notifications, MCP Servers, Audit Log, Scheduler
+- **Settings**: Connection config, auth, database backup/restore
+- **Live Events**: Bottom panel with real-time SSE feed, auto-refresh on active page
 
 ## Add any AI CLI provider
 
@@ -203,7 +258,7 @@ SQLite state defaults to:
 ~/.local/state/ai-cli-command-center/jobs.sqlite3
 ```
 
-Persisted fields include redacted argv, timestamps, status, return code, risk, errors, timeout, and bounded output. Environment values are never stored. Active records become `orphaned` after a server restart rather than being resumed unsafely.
+Persisted fields include redacted argv, timestamps, status, return code, risk, errors, timeout, retry policy, priority, and bounded output. Environment values are never stored. Active records become `orphaned` after a server restart rather than being resumed unsafely.
 
 Output streams over:
 
@@ -234,6 +289,8 @@ Default controls:
 - Environment override values omitted from history and redacted from output where detected
 - CSP, frame denial, no-sniff, referrer, and permissions headers
 - Generic internal errors paired with request IDs in structured logs
+- Multi-user RBAC with API key and TOTP MFA authentication
+- Tamper-evident audit log with SHA-256 chain verification
 
 For autonomous or untrusted workloads, run providers inside an external VM/container sandbox and use disposable workspaces.
 
@@ -275,6 +332,7 @@ Dangerous variables such as `LD_PRELOAD`, `BASH_ENV`, `NODE_OPTIONS`, `PYTHONPAT
 | `PANEL_ENV_ALLOWLIST` | empty | Extra exact environment names |
 | `PANEL_ENV_PREFIX_ALLOWLIST` | empty | Extra environment prefixes |
 | `PANEL_DATABASE_PATH` | XDG state path | SQLite database |
+| `PANEL_POSTGRES_URL` | empty | PostgreSQL connection URL for enterprise storage adapter |
 | `PANEL_MAX_CONCURRENT_JOBS` | `4` | Simultaneous provider processes |
 | `PANEL_JOB_TIMEOUT_SECONDS` | `21600` | Default job timeout |
 | `PANEL_MAX_JOB_TIMEOUT_SECONDS` | `86400` | Maximum user-selected timeout |
@@ -285,7 +343,6 @@ Dangerous variables such as `LD_PRELOAD`, `BASH_ENV`, `NODE_OPTIONS`, `PYTHONPAT
 | `PANEL_MAX_HELP_BYTES` | `2097152` | Help output cap |
 | `PANEL_USE_PTY` | `0` | Enable pseudo-terminal master-slave allocation (`1`) |
 | `PANEL_SANDBOX_DRIVER` | empty | Container sandbox wrapper driver (`bwrap`, `docker`) |
-| `PANEL_POSTGRES_URL` | empty | PostgreSQL connection URL for enterprise storage adapter |
 | `PANEL_RATE_LIMIT_PER_MINUTE` | `240` | API requests per source IP |
 | `PANEL_LOG_FORMAT` | `json` | `json` or `text` |
 | `PANEL_ENABLE_HSTS` | `0` | Add HSTS behind HTTPS-only proxy |
@@ -294,23 +351,96 @@ See [.env.example](.env.example).
 
 ## API and operations
 
+### Operational
 ```text
-GET    /healthz
-GET    /readyz
-GET    /api/info
-GET    /api/metrics
+GET  /healthz
+GET  /readyz
+GET  /api/version
+GET  /api/info
+GET  /api/metrics
+GET  /api/load
+GET  /api/analytics
+GET  /api/schemas
+```
+
+### Providers
+```text
 GET    /api/providers
 POST   /api/providers/probe
 POST   /api/providers
 DELETE /api/providers/{id}
 GET    /api/providers/{id}/info
 GET    /api/providers/{id}/schema
+POST   /api/providers/{id}/overlay
+```
+
+### Jobs
+```text
 POST   /api/jobs
+POST   /api/jobs/bulk
+POST   /api/jobs/bulk/stop
+POST   /api/jobs/bulk/delete
 GET    /api/jobs
 GET    /api/jobs/{id}
 GET    /api/jobs/{id}/events
 POST   /api/jobs/{id}/stop
+POST   /api/jobs/{id}/retry
+POST   /api/jobs/{id}/input
 DELETE /api/jobs/{id}
+```
+
+### Presets, Templates, Workflows, MCP, Worktrees
+```text
+GET /api/presets | POST /api/presets | DELETE /api/presets/{id}
+GET /api/templates | POST /api/templates | DELETE /api/templates/{id}
+GET /api/workflows | POST /api/workflows | DELETE /api/workflows/{id}
+GET /api/mcp | POST /api/mcp | DELETE /api/mcp/{id}
+GET /api/worktrees | POST /api/worktrees | DELETE /api/worktrees/{id}
+```
+
+### Schedules, Notifications, Webhooks, API Keys
+```text
+GET /api/schedules | POST /api/schedules | DELETE /api/schedules/{id}
+GET /api/notifications | POST /api/notifications | DELETE /api/notifications/{id}
+GET /api/webhooks | POST /api/webhooks | DELETE /api/webhooks/{id}
+GET /api/keys | POST /api/keys | DELETE /api/keys/{id}
+```
+
+### Users, MFA, Auth
+```text
+GET  /api/users | POST /api/users
+POST /api/mfa/setup | POST /api/mfa/verify
+```
+
+### Resilience & Observability
+```text
+GET  /api/circuit-breaker
+POST /api/circuit-breaker/{id}/reset
+GET  /api/health-probes
+POST /api/health-probes/{id}/enable
+GET  /api/provider-limits | POST /api/provider-limits
+GET  /api/retry-policies
+```
+
+### Audit, Backup, Events
+```text
+GET  /api/audit
+GET  /api/audit/verify
+GET  /api/backup | POST /api/restore
+GET  /api/events
+```
+
+### Git Integration
+```text
+GET  /api/files | GET /api/diff
+GET  /api/github/pulls | POST /api/github/pulls
+GET  /api/gitlab/merges | POST /api/gitlab/merges
+GET  /api/bitbucket/pulls | POST /api/bitbucket/pulls
+```
+
+### Self-Update
+```text
+POST /api/update
 ```
 
 Detailed API documentation is in [docs/API.md](docs/API.md) and [openapi.yaml](openapi.yaml).
@@ -326,6 +456,19 @@ docker compose up --build -d
 ```
 
 Build a derived image to install the required AI CLI providers.
+
+### Observability Stack (Grafana + Prometheus)
+
+Docker Compose includes optional Grafana and Prometheus services:
+
+```bash
+docker compose up --build -d
+```
+
+- **Prometheus**: `http://127.0.0.1:9090`
+- **Grafana**: `http://127.0.0.1:3000` (default admin/admin)
+
+Pre-built dashboards and alerting rules are in `grafana/`.
 
 ## Validation
 
@@ -344,12 +487,13 @@ make validate
 ./install.sh --service --host=127.0.0.1 --port=8765
 ```
 
-The installer backs up the previous application directory. v2.1 creates durable state under the XDG state directory. The existing provider registry remains compatible. Query-string token links are intentionally no longer accepted; enter the token when prompted or send it as an Authorization header.
+The installer backs up the previous application directory. v2.1+ creates durable state under the XDG state directory. The existing provider registry remains compatible. Query-string token links are intentionally no longer accepted; enter the token when prompted or send it as an Authorization header.
 
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [API](docs/API.md)
+- [User Guide](docs/USER-GUIDE.md)
 - [Deployment](docs/DEPLOYMENT.md)
 - [Threat model](docs/THREAT-MODEL.md)
 - [Security policy](SECURITY.md)

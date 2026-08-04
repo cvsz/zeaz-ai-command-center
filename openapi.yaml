@@ -1,13 +1,18 @@
 openapi: 3.1.0
 info:
   title: ZEAZ AI Command Center API
-  version: 2.1.0
-  description: Provider discovery, generated CLI schemas, durable jobs, and streamed process output.
+  version: 3.4.0
+  description: |
+    Provider discovery, generated CLI schemas, durable jobs, streamed process output,
+    workflows, analytics, notifications, webhooks, API keys, audit logging, and
+    a Windows 11 Fluent Design desktop GUI.
 servers:
   - url: http://127.0.0.1:8765
 security:
   - bearerAuth: []
+
 paths:
+  # ── Operational ──────────────────────────────────────────
   /healthz:
     get:
       security: []
@@ -24,8 +29,23 @@ paths:
       security: []
       summary: Readiness probe
       responses:
-        "200": {description: Service and SQLite are ready}
-        "503": {description: Service is not ready}
+        "200": { description: Service and database are ready }
+        "503": { description: Service is not ready }
+  /api/version:
+    get:
+      summary: API and application version
+      responses:
+        "200":
+          description: Version info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  api_version: { type: string }
+                  app_version: { type: string }
+                  parser_version: { type: string }
+                  engine: { type: string }
   /api/info:
     get:
       summary: Runtime information
@@ -37,13 +57,74 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+  /api/metrics:
+    get:
+      summary: Prometheus or JSON metrics
+      parameters:
+        - in: header
+          name: Accept
+          schema: { type: string, enum: ["application/json", "text/plain"] }
+      responses:
+        "200":
+          description: Job metrics
+  /api/load:
+    get:
+      summary: System load, queue depth, and load shedder state
+      responses:
+        "200":
+          description: Load state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  queue_depth: { type: integer }
+                  running: { type: integer }
+                  max_concurrent: { type: integer }
+                  overloaded: { type: boolean }
+                  priority_queue: { type: object }
+                  load_shedder: { type: object }
+  /api/analytics:
+    get:
+      summary: Aggregated job analytics
+      responses:
+        "200":
+          description: Analytics data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_jobs: { type: integer }
+                  totals_by_status: { type: object }
+                  success_rate_percent: { type: number }
+                  failure_rate_percent: { type: number }
+                  avg_duration_seconds: { type: number }
+                  p50_duration_seconds: { type: number }
+                  p95_duration_seconds: { type: number }
+                  p99_duration_seconds: { type: number }
+                  providers: { type: object }
+  /api/schemas:
+    get:
+      summary: List available request validation schemas
+      responses:
+        "200":
+          description: Schema names
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schemas: { type: array, items: { type: string } }
+
+  # ── Providers ────────────────────────────────────────────
   /api/providers:
     get:
       summary: List providers
       parameters:
         - in: query
           name: all
-          schema: {type: string, enum: ["0", "1"]}
+          schema: { type: string, enum: ["0", "1"] }
       responses:
         "200":
           description: Provider list
@@ -53,9 +134,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: "#/components/schemas/ProviderProbe"}
+            schema: { $ref: "#/components/schemas/ProviderProbe" }
       responses:
-        "201": {description: Provider registered}
+        "201": { description: Provider registered }
   /api/providers/probe:
     post:
       summary: Inspect a provider without saving it
@@ -63,16 +144,16 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: "#/components/schemas/ProviderProbe"}
+            schema: { $ref: "#/components/schemas/ProviderProbe" }
       responses:
-        "200": {description: Provider metadata and generated schema}
+        "200": { description: Provider metadata and generated schema }
   /api/providers/{providerId}/info:
     get:
       summary: Provider version and executable fingerprint
       parameters:
         - $ref: "#/components/parameters/ProviderId"
       responses:
-        "200": {description: Provider information}
+        "200": { description: Provider information }
   /api/providers/{providerId}/schema:
     get:
       summary: Generate or retrieve a help schema
@@ -80,14 +161,35 @@ paths:
         - $ref: "#/components/parameters/ProviderId"
         - in: query
           name: command
-          schema: {type: array, items: {type: string}}
+          schema: { type: array, items: { type: string } }
           style: form
           explode: true
         - in: query
           name: refresh
-          schema: {type: string, enum: ["0", "1"]}
+          schema: { type: string, enum: ["0", "1"] }
       responses:
-        "200": {description: Parsed CLI schema}
+        "200": { description: Parsed CLI schema }
+  /api/providers/{providerId}/overlay:
+    post:
+      summary: Save schema correction overlay
+      parameters:
+        - $ref: "#/components/parameters/ProviderId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "200": { description: Overlay saved }
+  /api/providers/{providerId}:
+    delete:
+      summary: Remove a custom provider
+      parameters:
+        - $ref: "#/components/parameters/ProviderId"
+      responses:
+        "200": { description: Provider removed }
+
+  # ── Jobs ─────────────────────────────────────────────────
   /api/jobs:
     get:
       summary: List durable jobs
@@ -100,13 +202,55 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: "#/components/schemas/CreateJob"}
+            schema: { $ref: "#/components/schemas/CreateJob" }
       responses:
         "202":
           description: Job accepted
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/Job"}
+              schema: { $ref: "#/components/schemas/Job" }
+  /api/jobs/bulk:
+    post:
+      summary: Create multiple jobs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [jobs]
+              properties:
+                jobs: { type: array, items: { $ref: "#/components/schemas/CreateJob" } }
+      responses:
+        "200": { description: Bulk results }
+  /api/jobs/bulk/stop:
+    post:
+      summary: Stop multiple jobs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [job_ids]
+              properties:
+                job_ids: { type: array, items: { type: string } }
+      responses:
+        "200": { description: Bulk stop results }
+  /api/jobs/bulk/delete:
+    post:
+      summary: Delete multiple terminal jobs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [job_ids]
+              properties:
+                job_ids: { type: array, items: { type: string } }
+      responses:
+        "200": { description: Bulk delete results }
   /api/jobs/{jobId}:
     get:
       summary: Read a job and output delta
@@ -114,21 +258,21 @@ paths:
         - $ref: "#/components/parameters/JobId"
         - in: query
           name: offset
-          schema: {type: integer, minimum: 0, default: 0}
+          schema: { type: integer, minimum: 0, default: 0 }
       responses:
         "200":
           description: Job snapshot
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/Job"}
+              schema: { $ref: "#/components/schemas/Job" }
     delete:
       summary: Delete a terminal job
       parameters:
         - $ref: "#/components/parameters/JobId"
       responses:
-        "200": {description: Deleted}
-        "400": {description: Job is not terminal}
-        "404": {description: Job not found}
+        "200": { description: Deleted }
+        "400": { description: Job is not terminal }
+        "404": { description: Job not found }
   /api/jobs/{jobId}/events:
     get:
       summary: Stream job snapshots with Server-Sent Events
@@ -136,85 +280,717 @@ paths:
         - $ref: "#/components/parameters/JobId"
         - in: query
           name: offset
-          schema: {type: integer, minimum: 0, default: 0}
+          schema: { type: integer, minimum: 0, default: 0 }
       responses:
         "200":
           description: SSE stream that closes at a terminal state
           content:
             text/event-stream:
-              schema: {type: string}
+              schema: { type: string }
   /api/jobs/{jobId}/stop:
     post:
       summary: Stop a queued or running job
       parameters:
         - $ref: "#/components/parameters/JobId"
       responses:
-        "200": {description: Stop initiated}
-        "409": {description: Job is not running}
+        "200": { description: Stop initiated }
+        "409": { description: Job is not running }
+  /api/jobs/{jobId}/retry:
+    post:
+      summary: Retry a failed or timed-out job
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      responses:
+        "200": { description: Retry initiated }
+  /api/jobs/{jobId}/input:
+    post:
+      summary: Relay stdin text to a running job
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [input]
+              properties:
+                input: { type: string }
+      responses:
+        "200": { description: Input relayed }
+
+  # ── Presets ──────────────────────────────────────────────
+  /api/presets:
+    get:
+      summary: List saved presets
+      responses:
+        "200": { description: Preset list }
+    post:
+      summary: Create a preset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Preset" }
+      responses:
+        "201": { description: Preset created }
+  /api/presets/{presetId}:
+    delete:
+      summary: Delete a preset
+      parameters:
+        - $ref: "#/components/parameters/PresetId"
+      responses:
+        "200": { description: Preset deleted }
+
+  # ── Templates ────────────────────────────────────────────
+  /api/templates:
+    get:
+      summary: List job templates
+      responses:
+        "200": { description: Template list }
+    post:
+      summary: Create a job template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Template" }
+      responses:
+        "201": { description: Template created }
+  /api/templates/{templateId}:
+    get:
+      summary: Get a template
+      parameters:
+        - $ref: "#/components/parameters/TemplateId"
+      responses:
+        "200": { description: Template object }
+    delete:
+      summary: Delete a template
+      parameters:
+        - $ref: "#/components/parameters/TemplateId"
+      responses:
+        "200": { description: Template deleted }
+
+  # ── Workflows ────────────────────────────────────────────
+  /api/workflows:
+    get:
+      summary: List workflows
+      responses:
+        "200": { description: Workflow list }
+    post:
+      summary: Create a workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Workflow" }
+      responses:
+        "201": { description: Workflow created }
+  /api/workflows/{workflowId}:
+    delete:
+      summary: Delete a workflow
+      parameters:
+        - $ref: "#/components/parameters/WorkflowId"
+      responses:
+        "200": { description: Workflow deleted }
+
+  # ── MCP Servers ──────────────────────────────────────────
+  /api/mcp:
+    get:
+      summary: List MCP servers
+      responses:
+        "200": { description: MCP server list }
+    post:
+      summary: Register an MCP server
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/McpServer" }
+      responses:
+        "201": { description: MCP server registered }
+  /api/mcp/{mcpId}:
+    delete:
+      summary: Delete an MCP server
+      parameters:
+        - $ref: "#/components/parameters/McpId"
+      responses:
+        "200": { description: MCP server deleted }
+
+  # ── Worktrees ────────────────────────────────────────────
+  /api/worktrees:
+    get:
+      summary: List git worktrees
+      responses:
+        "200": { description: Worktree list }
+    post:
+      summary: Create a git worktree
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                path: { type: string }
+                branch: { type: string }
+      responses:
+        "201": { description: Worktree created }
+  /api/worktrees/{worktreeId}:
+    delete:
+      summary: Delete a worktree record
+      parameters:
+        - $ref: "#/components/parameters/WorktreeId"
+      responses:
+        "200": { description: Worktree deleted }
+
+  # ── Schedules ────────────────────────────────────────────
+  /api/schedules:
+    get:
+      summary: List scheduled workflows
+      responses:
+        "200": { description: Schedule list }
+    post:
+      summary: Create a scheduled workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Schedule" }
+      responses:
+        "201": { description: Schedule created }
+  /api/schedules/{scheduleId}:
+    delete:
+      summary: Delete a schedule
+      parameters:
+        - $ref: "#/components/parameters/ScheduleId"
+      responses:
+        "200": { description: Schedule deleted }
+
+  # ── Notifications ────────────────────────────────────────
+  /api/notifications:
+    get:
+      summary: List notification channels
+      responses:
+        "200": { description: Channel list }
+    post:
+      summary: Create a notification channel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NotificationChannel" }
+      responses:
+        "201": { description: Channel created }
+  /api/notifications/{channelId}:
+    delete:
+      summary: Delete a notification channel
+      parameters:
+        - $ref: "#/components/parameters/ChannelId"
+      responses:
+        "200": { description: Channel deleted }
+
+  # ── Webhooks ─────────────────────────────────────────────
+  /api/webhooks:
+    get:
+      summary: List outgoing webhooks
+      responses:
+        "200": { description: Webhook list }
+    post:
+      summary: Create a webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Webhook" }
+      responses:
+        "201": { description: Webhook created }
+  /api/webhooks/{webhookId}:
+    delete:
+      summary: Delete a webhook
+      parameters:
+        - $ref: "#/components/parameters/WebhookId"
+      responses:
+        "200": { description: Webhook deleted }
+
+  # ── API Keys ─────────────────────────────────────────────
+  /api/keys:
+    get:
+      summary: List API keys
+      responses:
+        "200": { description: API key list (hashes only) }
+    post:
+      summary: Generate a new API key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ApiKeyCreate" }
+      responses:
+        "201": { description: Key created (raw key shown once) }
+  /api/keys/{keyId}:
+    delete:
+      summary: Revoke an API key
+      parameters:
+        - $ref: "#/components/parameters/KeyId"
+      responses:
+        "200": { description: Key revoked }
+
+  # ── Users & MFA ──────────────────────────────────────────
+  /api/users:
+    get:
+      summary: List users
+      responses:
+        "200": { description: User list }
+    post:
+      summary: Create or update a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string }
+                role: { type: string, enum: [admin, operator, viewer], default: operator }
+      responses:
+        "201": { description: User created }
+  /api/mfa/setup:
+    post:
+      summary: Generate TOTP MFA secret
+      responses:
+        "200":
+          description: MFA secret and otpauth URI
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  user_id: { type: string }
+                  secret: { type: string }
+                  otpauth_url: { type: string }
+  /api/mfa/verify:
+    post:
+      summary: Verify a TOTP code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+      responses:
+        "200":
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  verified: { type: boolean }
+
+  # ── Resilience ───────────────────────────────────────────
+  /api/circuit-breaker:
+    get:
+      summary: All circuit breaker states
+      responses:
+        "200": { description: Circuit breaker states }
+  /api/circuit-breaker/{providerId}/reset:
+    post:
+      summary: Reset a circuit breaker to closed
+      parameters:
+        - $ref: "#/components/parameters/ProviderId"
+      responses:
+        "200": { description: Circuit breaker reset }
+  /api/health-probes:
+    get:
+      summary: Provider health probe results
+      responses:
+        "200": { description: Health probe results }
+  /api/health-probes/{providerId}/enable:
+    post:
+      summary: Re-enable a disabled provider
+      parameters:
+        - $ref: "#/components/parameters/ProviderId"
+      responses:
+        "200": { description: Provider re-enabled }
+  /api/provider-limits:
+    get:
+      summary: Per-provider rate limits and concurrency caps
+      responses:
+        "200": { description: Provider limits }
+    post:
+      summary: Set per-provider rate/concurrency limits
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider_id]
+              properties:
+                provider_id: { type: string }
+                rate_limit_per_min: { type: integer }
+                concurrency_cap: { type: integer }
+      responses:
+        "200": { description: Limits updated }
+  /api/retry-policies:
+    get:
+      summary: List retryable jobs and pending retries
+      responses:
+        "200": { description: Retry policy info }
+
+  # ── Audit & Backup ───────────────────────────────────────
+  /api/audit:
+    get:
+      summary: Export audit log
+      parameters:
+        - in: query
+          name: since
+          schema: { type: number, default: 0 }
+      responses:
+        "200": { description: Audit log entries }
+  /api/audit/verify:
+    get:
+      summary: Verify audit chain integrity
+      responses:
+        "200":
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  valid: { type: integer }
+                  intact: { type: boolean }
+                  broken_at: { type: [integer, "null"] }
+  /api/backup:
+    get:
+      summary: Export full database backup as JSON
+      responses:
+        "200": { description: Complete backup JSON }
+  /api/restore:
+    post:
+      summary: Import a database backup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "200": { description: Import result }
+
+  # ── Events (SSE) ────────────────────────────────────────
+  /api/events:
+    get:
+      summary: Global SSE event stream for all job lifecycle events
+      parameters:
+        - in: query
+          name: after
+          schema: { type: integer }
+      responses:
+        "200":
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema: { type: string }
+
+  # ── Git Integration ─────────────────────────────────────
+  /api/files:
+    get:
+      summary: List workspace directory
+      parameters:
+        - in: query
+          name: cwd
+          schema: { type: string }
+      responses:
+        "200": { description: File listing }
+  /api/diff:
+    get:
+      summary: Git diff output
+      parameters:
+        - in: query
+          name: cwd
+          schema: { type: string }
+      responses:
+        "200": { description: Git diff }
+  /api/github/pulls:
+    get:
+      summary: List GitHub PRs
+      parameters:
+        - in: query
+          name: cwd
+          schema: { type: string }
+      responses:
+        "200": { description: PR list }
+    post:
+      summary: Create a GitHub PR
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                body: { type: string }
+      responses:
+        "200": { description: PR created }
+  /api/gitlab/merges:
+    get:
+      summary: List GitLab MRs
+      parameters:
+        - in: query
+          name: cwd
+          schema: { type: string }
+      responses:
+        "200": { description: MR list }
+    post:
+      summary: Create a GitLab MR
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                description: { type: string }
+                target_branch: { type: string }
+                source_branch: { type: string }
+      responses:
+        "200": { description: MR created }
+  /api/bitbucket/pulls:
+    get:
+      summary: List Bitbucket PRs
+      parameters:
+        - in: query
+          name: cwd
+          schema: { type: string }
+      responses:
+        "200": { description: PR list }
+    post:
+      summary: Create a Bitbucket PR
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                description: { type: string }
+                source_branch: { type: string }
+                destination_branch: { type: string }
+      responses:
+        "200": { description: PR created }
+
+  # ── Self-Update ──────────────────────────────────────────
+  /api/update:
+    post:
+      summary: Pull latest release from GitHub origin/main
+      responses:
+        "200": { description: Update result }
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
+      description: Bearer token or API key
+
   parameters:
     ProviderId:
       in: path
       name: providerId
       required: true
-      schema: {type: string, maxLength: 80}
+      schema: { type: string, maxLength: 80 }
     JobId:
       in: path
       name: jobId
       required: true
-      schema: {type: string, pattern: "^[a-f0-9]{12}$"}
+      schema: { type: string, pattern: "^[a-f0-9]{12}$" }
+    PresetId:
+      in: path
+      name: presetId
+      required: true
+      schema: { type: string }
+    TemplateId:
+      in: path
+      name: templateId
+      required: true
+      schema: { type: string }
+    WorkflowId:
+      in: path
+      name: workflowId
+      required: true
+      schema: { type: string }
+    McpId:
+      in: path
+      name: mcpId
+      required: true
+      schema: { type: string }
+    WorktreeId:
+      in: path
+      name: worktreeId
+      required: true
+      schema: { type: string }
+    ScheduleId:
+      in: path
+      name: scheduleId
+      required: true
+      schema: { type: string }
+    ChannelId:
+      in: path
+      name: channelId
+      required: true
+      schema: { type: string }
+    WebhookId:
+      in: path
+      name: webhookId
+      required: true
+      schema: { type: string }
+    KeyId:
+      in: path
+      name: keyId
+      required: true
+      schema: { type: string }
+
   schemas:
     Health:
       type: object
       required: [status, version]
       properties:
-        status: {type: string, const: ok}
-        version: {type: string}
+        status: { type: string, const: ok }
+        version: { type: string }
     ProviderProbe:
       type: object
       required: [executable]
       properties:
-        id: {type: string}
-        name: {type: string}
-        executable: {type: string}
-        help_args: {type: string, default: --help}
-        version_args: {type: string, default: --version}
-        command_path: {type: array, items: {type: string}}
+        id: { type: string }
+        name: { type: string }
+        executable: { type: string }
+        help_args: { type: string, default: --help }
+        version_args: { type: string, default: --version }
+        command_path: { type: array, items: { type: string } }
     CreateJob:
       type: object
       required: [provider_id, cwd]
       properties:
-        provider_id: {type: string}
-        cwd: {type: string}
-        command_path: {type: array, items: {type: string}}
-        global_options: {type: object, additionalProperties: true}
-        command_options: {type: object, additionalProperties: true}
-        positionals: {type: array, items: {type: string}}
-        raw_args: {type: array, items: {type: string}}
-        prompt: {type: string}
-        environment: {type: object, additionalProperties: {type: string}}
-        confirmation: {type: string}
-        timeout_seconds: {type: integer, minimum: 1}
+        provider_id: { type: string }
+        cwd: { type: string }
+        command_path: { type: array, items: { type: string } }
+        global_options: { type: object, additionalProperties: true }
+        command_options: { type: object, additionalProperties: true }
+        positionals: { type: array, items: { type: string } }
+        raw_args: { type: array, items: { type: string } }
+        prompt: { type: string }
+        environment: { type: object, additionalProperties: { type: string } }
+        confirmation: { type: string }
+        timeout_seconds: { type: integer, minimum: 1 }
+        priority: { type: string, enum: [urgent, normal, background], default: normal }
+        retry: { $ref: "#/components/schemas/RetryPolicy" }
+        template_id: { type: string }
     Job:
       type: object
       required: [id, provider_id, argv, cwd, created_at, status, risk, output, next_offset]
       properties:
-        id: {type: string}
-        provider_id: {type: string}
-        argv: {type: array, items: {type: string}, description: Sensitive values are redacted}
-        cwd: {type: string}
-        created_at: {type: number}
-        started_at: {type: [number, "null"]}
-        finished_at: {type: [number, "null"]}
-        status: {type: string, enum: [queued, running, stopping, succeeded, failed, stopped, timed_out, orphaned]}
-        return_code: {type: [integer, "null"]}
-        error: {type: [string, "null"]}
-        risk: {type: string, enum: [normal, destructive, dangerous]}
-        timeout_seconds: {type: integer}
-        output: {type: string}
-        next_offset: {type: integer}
-        output_truncated: {type: boolean}
+        id: { type: string }
+        provider_id: { type: string }
+        argv: { type: array, items: { type: string }, description: Sensitive values are redacted }
+        cwd: { type: string }
+        created_at: { type: number }
+        started_at: { type: [number, "null"] }
+        finished_at: { type: [number, "null"] }
+        status: { type: string, enum: [queued, running, stopping, succeeded, failed, stopped, timed_out, orphaned] }
+        return_code: { type: [integer, "null"] }
+        error: { type: [string, "null"] }
+        risk: { type: string, enum: [normal, destructive, dangerous] }
+        timeout_seconds: { type: integer }
+        priority: { type: string, enum: [urgent, normal, background] }
+        retry_count: { type: integer }
+        max_retries: { type: integer }
+        retry_policy: { type: string, enum: [exponential, linear, fixed] }
+        output: { type: string }
+        next_offset: { type: integer }
+        output_truncated: { type: boolean }
+        can_retry: { type: boolean }
+    Preset:
+      type: object
+      required: [name, provider_id]
+      properties:
+        name: { type: string }
+        provider_id: { type: string }
+        command_path: { type: array, items: { type: string } }
+        global_options: { type: object }
+        command_options: { type: object }
+        positionals: { type: array, items: { type: string } }
+        raw_args: { type: array, items: { type: string } }
+        prompt: { type: string }
+    Template:
+      type: object
+      required: [name, template]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        template: { type: object, additionalProperties: true }
+    Workflow:
+      type: object
+      required: [name, steps]
+      properties:
+        name: { type: string }
+        steps: { type: array, items: { type: object } }
+        status: { type: string }
+    McpServer:
+      type: object
+      required: [name, command]
+      properties:
+        name: { type: string }
+        command: { type: string }
+        args: { type: array, items: { type: string } }
+        status: { type: string }
+    Schedule:
+      type: object
+      properties:
+        name: { type: string }
+        provider_id: { type: string, default: shell }
+        command: { type: array, items: { type: string } }
+        cwd: { type: string }
+        interval_seconds: { type: number }
+        enabled: { type: boolean, default: true }
+        timeout_seconds: { type: integer, default: 3600 }
+    NotificationChannel:
+      type: object
+      required: [type, name]
+      properties:
+        type: { type: string, enum: [slack, discord, email] }
+        name: { type: string }
+        url: { type: string }
+        recipients: { type: array, items: { type: string } }
+        events: { type: array, items: { type: string } }
+    Webhook:
+      type: object
+      required: [url]
+      properties:
+        url: { type: string }
+        secret: { type: string }
+        events: { type: array, items: { type: string } }
+        enabled: { type: boolean, default: true }
+    ApiKeyCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        role: { type: string, enum: [admin, operator, viewer], default: operator }
+        expires_at: { type: [number, "null"] }
+    RetryPolicy:
+      type: object
+      properties:
+        max_retries: { type: integer, minimum: 0, maximum: 10 }
+        policy: { type: string, enum: [exponential, linear, fixed], default: exponential }
+        initial_delay: { type: number, minimum: 0.1, default: 1.0 }
+        max_delay: { type: number, minimum: 1, default: 300.0 }
