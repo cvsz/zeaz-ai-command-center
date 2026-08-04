@@ -148,14 +148,13 @@ RestartSec=2
 TimeoutStopSec=20
 UMask=0077
 NoNewPrivileges=true
-PrivateTmp=true
 RestrictSUIDSGID=true
 LockPersonality=true
 
-# Keep the default user unit portable. ProtectKernelTunables=,
-# ProtectKernelModules=, ProtectControlGroups= and ProtectSystem=strict
-# require namespace/capability operations that are unavailable in some VMs,
-# containers, WSL hosts and restricted systemd --user sessions.
+# Keep the default systemd --user unit portable. PrivateTmp=,
+# ProtectSystem=, ProtectKernelTunables=, ProtectKernelModules= and
+# ProtectControlGroups= require mount namespace or capability operations that
+# are unavailable in some VMs, containers, WSL hosts and restricted sessions.
 
 [Install]
 WantedBy=default.target
