@@ -130,6 +130,7 @@ printf 'State:      %s\n' "$STATE_DIR"
 if [[ "$INSTALL_SERVICE" == "1" ]]; then
   command -v systemctl >/dev/null || { echo "systemctl is required for --service" >&2; exit 1; }
   mkdir -p "$SERVICE_DIR"
+  systemctl --user stop "${APP_NAME}.service" 2>/dev/null || true
   cat > "$SERVICE_DIR/${APP_NAME}.service" <<EOF
 [Unit]
 Description=AI CLI Command Center ${APP_VERSION}
@@ -148,17 +149,19 @@ TimeoutStopSec=20
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=strict
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
 RestrictSUIDSGID=true
 LockPersonality=true
+
+# Keep the default user unit portable. ProtectKernelTunables=,
+# ProtectKernelModules=, ProtectControlGroups= and ProtectSystem=strict
+# require namespace/capability operations that are unavailable in some VMs,
+# containers, WSL hosts and restricted systemd --user sessions.
 
 [Install]
 WantedBy=default.target
 EOF
   systemctl --user daemon-reload
+  systemctl --user reset-failed "${APP_NAME}.service" 2>/dev/null || true
   if [[ "$START_SERVICE" == "1" ]]; then
     systemctl --user enable --now "${APP_NAME}.service"
     echo "Service:    active (systemctl --user status ${APP_NAME})"
