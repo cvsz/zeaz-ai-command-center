@@ -28,7 +28,7 @@ def test_python_distribution_and_launchers_are_complete():
     pyproject = (ROOT / "pyproject.toml").read_text()
     assert 'dynamic = ["version"]' in pyproject
     assert 'version = {attr = "version.__version__"}' in pyproject
-    for module in ("server", "help_parser", "storage", "gui", "version"):
+    for module in ("server", "help_parser", "storage", "gui", "zai", "version"):
         assert f'"{module}"' in pyproject
     assert 'packages = ["static"]' in pyproject
     assert 'static = ["*.html", "*.css", "*.js"]' in pyproject
@@ -37,9 +37,15 @@ def test_python_distribution_and_launchers_are_complete():
         assert (ROOT / "static" / asset).is_file()
     assert 'zeaz-ai-command-center = "server:main"' in pyproject
     assert 'zeaz-ai-command-center-gui = "gui:main"' in pyproject
+    assert 'zai = "zai:main"' in pyproject
 
     installer = (ROOT / "install.sh").read_text()
     assert "gui.py" in installer
+    assert "zai.py" in installer
     assert "version.py" in installer
     assert '${APP_NAME}-gui' in installer
+    assert '$BIN_DIR/zai' in installer
     assert "--upgrade" in installer
+
+    uninstaller = (ROOT / "uninstall.sh").read_text()
+    assert '"${HOME}/.local/bin/zai"' in uninstaller
