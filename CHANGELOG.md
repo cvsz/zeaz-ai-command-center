@@ -2,6 +2,18 @@
 
 All notable changes are documented here.
 
+## [Unreleased]
+
+### Fixed
+
+- `zai` no longer exceeds the Command Center's default API rate limit while streaming long-running jobs. Status polling now defaults to one request per second and HTTP 429 responses use bounded exponential backoff before resuming the same job.
+- Control-plane HTTP 429 responses no longer cause a running job to be abandoned or duplicated.
+
+### Added
+
+- Reason-aware local fallback for genuine AI-provider rate limits. The default fallback route is `ollama run qwen3-coder`, configurable with `ZAI_LOCAL_PROVIDER` and `ZAI_LOCAL_MODEL`.
+- `--local-fallback`, `--no-local-fallback`, `--local-provider`, `--local-model`, and `--poll-interval` CLI options.
+
 
 ## [3.4.3] - 2026-08-04
 
@@ -58,113 +70,3 @@ All notable changes are documented here.
 - Provider management with circuit breaker, rate limit, and health probe views
 - User management with role-based creation
 - Audit log viewer with chain verification and JSON export
-- Settings page with connection config, auth, and database backup/restore
-- Live SSE event feed panel with color-coded auto-refresh
-- Fluent-styled widgets: rounded buttons, card panels, status badges, combo boxes
-- Segoe UI Variable / Cascadia Code fonts, Mica-like background, accent colors
-- `APIClient` REST helper with Bearer auth and /api/v1 prefix
-- `SSEClient` background thread SSE stream parser for /api/events
-- 19 new GUI-specific tests (103 total)
-
-## [3.3.0] - 2026-08-04
-
-### Added
-
-- API versioning with /api/v1/ prefix, X-API-Version header, and GET /api/version
-- Comprehensive integration test suite for all HTTP endpoints
-- Job templates with CRUD API and template_id pre-fill on job creation
-- Database backup and restore with JSON snapshot export/import
-- Scoped API key management with create, list, revoke, and auth middleware integration
-- Outgoing webhooks with HMAC-SHA256 signing and event filtering
-- Bulk job operations: bulk create, bulk stop, bulk delete
-- Unified SSE event stream at GET /api/events for job state changes
-
-## [3.2.0] - 2026-08-04
-
-### Added
-
-- Per-provider rate limiting and concurrency caps
-- Job retry policies with configurable backoff (linear, exponential, fixed)
-- Circuit breaker for persistently failing providers
-- Graceful degradation under load: shed low-priority jobs, throttle non-critical endpoints
-- Provider health probes and automatic disable on repeated failure
-- Job priority queuing (urgent, normal, background tiers)
-- Request validation and schema enforcement for all API endpoints
-
-## [3.1.0] - 2026-08-04
-
-### Added
-
-- Job analytics dashboard: execution duration, success/failure rates, provider usage stats
-- Prometheus metrics expansion: per-provider latency, queue depth, workflow DAG latency
-- Grafana dashboard templates and alerting rules
-- Notification integrations: Slack, Discord, email on job/workflow completion or failure
-- GitLab and Bitbucket provider integrations
-- Calendar-scheduled workflows (cron + ICS import)
-- Exportable audit logs with tamper-evident checksums
-
-## [3.0.0] - 2026-08-04
-
-### Added
-
-- Durable workflow engine with dependencies and approval gates
-- Git worktree isolation per execution
-- GitHub pull-request integration
-- MCP server and tool manager
-- PostgreSQL and queue adapters
-- Multi-user authentication and RBAC
-- Remote workers and container sandbox adapters
-
-## [2.2.0] - 2026-08-04
-
-### Added
-
-- WebSocket PTY and terminal stream
-- Stdin relay and approval prompt relay
-- Presets and favorites
-- Workspace file browser and diff viewer
-- Job retry/clone and downloadable logs
-- Schema correction overlays
-
-## [2.1.0] - 2026-08-04
-
-### Added
-
-- Durable SQLite job metadata and bounded output using WAL mode
-- Restart recovery that marks interrupted jobs as orphaned
-- Server-Sent Event job output streaming with reconnect offsets
-- Per-job timeout overrides, bounded concurrency, retention, deletion, and terminal states
-- Provider SHA-256 fingerprints, ownership metadata, and binary-change warnings
-- Environment exact/prefix allowlist with loader-variable denylist
-- Sensitive argv and process-environment output redaction
-- `/healthz`, `/readyz`, `/api/metrics`, request IDs, and JSON logs
-- Host validation, same-origin mutation checks, request rate limiting, CSP, and permissions headers
-- Rootless Dockerfile, hardened Compose example, and hardened systemd user service
-- Python 3.10–3.14 CI, frontend/shell checks, container build, CodeQL, and Dependabot
-- OpenAPI document, architecture, deployment, threat model, security, contribution, and roadmap documents
-- Parser v3 metadata for defaults, environment hints, deprecated entries, global scope, negatable flags, brace choices, and command positionals
-- Expanded unit and HTTP integration tests
-
-### Changed
-
-- Authentication accepts bearer headers only; URL query tokens are no longer accepted
-- Internal server errors are no longer returned verbatim to clients
-- Job history stores redacted argv and never stores environment values
-- Installer is upgrade-safe, creates backups, preserves state, and supports `--no-start`
-- UI streams output instead of polling and supports timeout selection and job deletion
-
-### Fixed
-
-- Job timeout and cancellation now work for commands that produce no output
-- Process readers no longer block the manager's timeout loop
-- Queued jobs can be stopped before execution
-- Output truncation offsets survive service restarts
-
-## [2.0.0] - 2026-08-03
-
-- Provider-agnostic AI CLI discovery
-- Dynamic `--help` parser and recursive subcommands
-- Structured argv command builder
-- Safe `shell=False` execution
-- Workspace allowlist and confirmation gates
-- Live output, cancellation, history, web UI, installer, examples, and tests
