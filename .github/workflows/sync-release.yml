@@ -16,6 +16,11 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install validation tool
+        run: python -m pip install --disable-pip-version-check -q pytest
       - name: Synchronize v3.4.2 metadata
         run: |
           python3 - <<'PY'
