@@ -269,7 +269,7 @@ def run_capture(argv: list[str], *, cwd: Path | str | None = None, timeout: int 
         if not BINARY_RE.fullmatch(executable_name):
             raise ValueError(f"Absolute executable path rejected: {executable}")
         discovered = shutil.which(executable_name)
-        discovered_resolved = str(Path(discovered).resolve()) if discovered else ""
+        discovered_resolved = resolve_executable(executable_name) if discovered else ""
         if executable == discovered_resolved:
             resolved_executable = discovered_resolved
         elif os.getenv("PANEL_ALLOW_ABSOLUTE_BINARIES", "0") == "1":
