@@ -1,0 +1,53 @@
+"""Regression tests for canonical PATH discovery and secure provider execution."""
+
+import os
+import sys
+from pathlib import Path
+
+import pytest
+
+from server import resolve_executable, run_capture
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symlink executable semantics differ on Windows")
+def test_run_capture_accepts_canonical_target_resolved_from_path(tmp_path: Path, monkeypatch):
+    release_dir = tmp_path / ".codex" / "packages" / "standalone" / "releases" / "0.146.0-test" / "bin"
+    release_dir.mkdir(parents=True)
+    target = release_dir / "codex"
+    target.write_text("#!/usr/bin/env python3\nprint('codex-test')\n", encoding="utf-8")
+    target.chmod(0o755)
+
+    launcher_dir = tmp_path / ".local" / "bin"
+    launcher_dir.mkdir(parents=True)
+    (launcher_dir / "codex").symlink_to(target)
+
+    monkeypatch.setenv("PATH", f"{launcher_dir}{os.pathsep}{os.environ.get('PATH', '')}")
+    monkeypatch.delenv("PANEL_ALLOW_ABSOLUTE_BINARIES", raising=False)
+
+    resolved = resolve_executable("codex")
+    assert resolved == str(target.resolve())
+
+    code, output = run_capture([resolved, "--version"])
+    assert code == 0
+    assert output.strip() == "codex-test"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable bit required")
+def test_run_capture_rejects_absolute_path_not_resolved_from_path(tmp_path: Path, monkeypatch):
+    executable = tmp_path / "rogue-provider"
+    executable.write_text("#!/usr/bin/env python3\nprint('unexpected')\n", encoding="utf-8")
+    executable.chmod(0o755)
+    monkeypatch.delenv("PANEL_ALLOW_ABSOLUTE_BINARIES", raising=False)
+
+    with pytest.raises(ValueError, match="not the active executable resolved from PATH"):
+        run_capture([str(executable)])
+
+
+def test_resolve_explicit_absolute_path_still_requires_opt_in(tmp_path: Path, monkeypatch):
+    executable = tmp_path / "custom-provider"
+    executable.write_text("provider", encoding="utf-8")
+    executable.chmod(0o755)
+    monkeypatch.delenv("PANEL_ALLOW_ABSOLUTE_BINARIES", raising=False)
+
+    with pytest.raises(ValueError, match="Absolute executable paths are disabled"):
+        resolve_executable(str(executable))

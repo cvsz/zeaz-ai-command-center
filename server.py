@@ -239,6 +239,8 @@ def _provider_id(value: str) -> str:
     return provider_id[:80]
 
 
+
+
 def resolve_executable(executable: Any) -> str:
     raw = safe_text(executable, max_len=4096).strip()
     if not raw:
@@ -262,8 +264,24 @@ def run_capture(argv: list[str], *, cwd: Path | str | None = None, timeout: int 
     if not argv:
         raise ValueError("Empty command")
     executable = argv[0]
-    if os.path.isabs(executable) and os.getenv("PANEL_ALLOW_ABSOLUTE_BINARIES", "0") != "1":
-        raise ValueError(f"Absolute executable path rejected: {executable}")
+    if os.path.isabs(executable):
+        executable_name = os.path.basename(executable)
+        if not BINARY_RE.fullmatch(executable_name):
+            raise ValueError(f"Absolute executable path rejected: {executable}")
+        discovered = shutil.which(executable_name)
+        discovered_resolved = resolve_executable(executable_name) if discovered else ""
+        if executable == discovered_resolved:
+            resolved_executable = discovered_resolved
+        elif os.getenv("PANEL_ALLOW_ABSOLUTE_BINARIES", "0") == "1":
+            resolved_executable = resolve_executable(executable)
+        else:
+            raise ValueError(
+                f"Absolute executable path rejected: {executable}; "
+                "it is not the active executable resolved from PATH"
+            )
+    else:
+        resolved_executable = resolve_executable(executable)
+    argv = [resolved_executable, *argv[1:]]
     env = os.environ.copy()
     env.setdefault("TERM", "dumb")
     env.setdefault("NO_COLOR", "1")
