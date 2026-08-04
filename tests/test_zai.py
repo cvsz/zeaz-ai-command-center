@@ -1,4 +1,3 @@
-import argparse
 import json
 from pathlib import Path
 
@@ -20,7 +19,10 @@ class FakeClient:
         self.calls.append((method, path, payload))
         if not self.responses:
             raise AssertionError(f"Unexpected request: {method} {path}")
-        return self.responses.pop(0)
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
 
 
 def test_load_env_file_without_executing_shell(tmp_path: Path):
@@ -56,11 +58,38 @@ def test_provider_and_model_overrides(tmp_path: Path):
     assert payload["global_options"] == {"--model": "gemini-pro"}
 
 
+def test_local_fallback_payload_uses_ollama_run_model(tmp_path: Path):
+    args = zai.parser().parse_args(
+        ["--cwd", str(tmp_path), "--local-model", "qwen3:8b", "Explain", "code"]
+    )
+    payload = zai.build_local_fallback_payload(args, {}, "Explain code")
+    assert payload["provider_id"] == "ollama"
+    assert payload["command_path"] == ["run"]
+    assert payload["positionals"] == ["qwen3:8b"]
+    assert payload["prompt"] == "Explain code"
+
+
 def test_extract_job_accepts_wrapped_and_direct_payloads():
     assert zai.extract_job({"job": {"id": "abc"}})["id"] == "abc"
     assert zai.extract_job({"id": "xyz"})["id"] == "xyz"
     with pytest.raises(zai.ZaiError):
         zai.extract_job({"status": "ok"})
+
+
+def test_request_with_backoff_retries_only_429(monkeypatch, capsys):
+    client = FakeClient([zai.ZaiHttpError(429, "Rate limit exceeded", retry_after=0.5), {"ok": True}])
+    sleeps = []
+    monkeypatch.setattr(zai.time, "sleep", sleeps.append)
+    assert zai.request_with_backoff(client, "POST", "/api/jobs", {"prompt": "x"}) == {"ok": True}
+    assert sleeps == [0.5]
+    assert "retrying in 0.5s" in capsys.readouterr().err
+
+
+def test_request_with_backoff_does_not_retry_other_http_errors(monkeypatch):
+    client = FakeClient([zai.ZaiHttpError(401, "Unauthorized")])
+    monkeypatch.setattr(zai.time, "sleep", lambda _seconds: pytest.fail("must not sleep"))
+    with pytest.raises(zai.ZaiHttpError, match="HTTP 401"):
+        zai.request_with_backoff(client, "POST", "/api/jobs", {})
 
 
 def test_dashboard_opens_browser(monkeypatch, capsys):
@@ -98,6 +127,87 @@ def test_submit_prompt_streams_job_output(monkeypatch, tmp_path: Path, capsys):
     method, path, payload = client.calls[0]
     assert (method, path) == ("POST", "/api/jobs")
     assert payload["provider_id"] == "codex"
+
+
+def test_status_polling_429_backs_off_and_resumes(monkeypatch, tmp_path: Path, capsys):
+    client = FakeClient(
+        [
+            {"job": {"id": "job-rate"}},
+            zai.ZaiHttpError(429, "Rate limit exceeded", retry_after=0.5),
+            {"id": "job-rate", "status": "succeeded", "output": "done\n", "next_offset": 5},
+        ]
+    )
+    sleeps = []
+    args = zai.parser().parse_args(["--cwd", str(tmp_path), "hello"])
+    monkeypatch.setattr(zai, "ensure_server", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(zai.time, "sleep", sleeps.append)
+    assert zai.submit_prompt(client, args, {}, "hello") == 0
+    captured = capsys.readouterr()
+    assert captured.out == "done\n"
+    assert "status polling rate-limited" in captured.err
+    assert sleeps == [0.5]
+    assert len([call for call in client.calls if call[0] == "POST"]) == 1
+
+
+def test_provider_rate_limit_falls_back_to_local_ollama(monkeypatch, tmp_path: Path, capsys):
+    client = FakeClient(
+        [
+            {"job": {"id": "cloud-job"}},
+            {
+                "id": "cloud-job",
+                "provider_id": "codex",
+                "status": "failed",
+                "error": "provider exited with 1",
+                "output": "HTTP 429 rate limit exceeded\n",
+                "next_offset": 29,
+            },
+            {"job": {"id": "local-job"}},
+            {
+                "id": "local-job",
+                "provider_id": "ollama",
+                "status": "succeeded",
+                "output": "local result\n",
+                "next_offset": 13,
+            },
+        ]
+    )
+    args = zai.parser().parse_args(
+        ["--cwd", str(tmp_path), "--local-model", "qwen3:8b", "fix", "tests"]
+    )
+    monkeypatch.setattr(zai, "ensure_server", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(zai.time, "sleep", lambda _seconds: None)
+    assert zai.submit_prompt(client, args, {}, "fix tests") == 0
+    captured = capsys.readouterr()
+    assert "HTTP 429 rate limit exceeded" in captured.out
+    assert "local result" in captured.out
+    assert "falling back to local ollama/qwen3:8b" in captured.err
+    posts = [call for call in client.calls if call[0] == "POST"]
+    assert len(posts) == 2
+    fallback = posts[1][2]
+    assert fallback["provider_id"] == "ollama"
+    assert fallback["command_path"] == ["run"]
+    assert fallback["positionals"] == ["qwen3:8b"]
+
+
+def test_generic_provider_failure_does_not_fallback(monkeypatch, tmp_path: Path):
+    client = FakeClient(
+        [
+            {"job": {"id": "cloud-job"}},
+            {
+                "id": "cloud-job",
+                "provider_id": "codex",
+                "status": "failed",
+                "error": "invalid prompt",
+                "output": "",
+                "next_offset": 0,
+            },
+        ]
+    )
+    args = zai.parser().parse_args(["--cwd", str(tmp_path), "hello"])
+    monkeypatch.setattr(zai, "ensure_server", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(zai.time, "sleep", lambda _seconds: None)
+    assert zai.submit_prompt(client, args, {}, "hello") == 1
+    assert len([call for call in client.calls if call[0] == "POST"]) == 1
 
 
 def test_no_wait_prints_job_id(monkeypatch, tmp_path: Path, capsys):
