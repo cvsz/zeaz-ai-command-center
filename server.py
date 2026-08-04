@@ -239,6 +239,24 @@ def _provider_id(value: str) -> str:
     return provider_id[:80]
 
 
+
+def _validate_runnable_executable(executable: Any) -> str:
+    """Return a canonical executable path after runtime safety checks.
+
+    Absolute-path authorization is intentionally enforced by the caller that
+    accepts external configuration. Internal callers may receive the canonical
+    path produced by ``resolve_executable`` and must not reject it a second time.
+    """
+    path = Path(safe_text(executable, max_len=4096)).expanduser().resolve()
+    if not path.is_absolute() or not path.exists() or not path.is_file():
+        raise ValueError(f"Executable is not runnable: {path}")
+    if sys.platform != "win32" and not os.access(path, os.X_OK):
+        raise ValueError(f"Executable is not runnable: {path}")
+    metadata = path.stat()
+    if metadata.st_mode & stat.S_IWOTH and os.getenv("PANEL_ALLOW_WORLD_WRITABLE_BINARIES", "0") != "1":
+        raise ValueError("Refusing world-writable provider executable")
+    return str(path)
+
 def resolve_executable(executable: Any) -> str:
     raw = safe_text(executable, max_len=4096).strip()
     if not raw:
@@ -246,24 +264,34 @@ def resolve_executable(executable: Any) -> str:
     if "/" in raw or "\\" in raw:
         if os.getenv("PANEL_ALLOW_ABSOLUTE_BINARIES", "0") != "1":
             raise ValueError("Absolute executable paths are disabled; set PANEL_ALLOW_ABSOLUTE_BINARIES=1 to enable")
-        path = Path(raw).expanduser().resolve()
-        if not path.is_absolute() or not path.exists() or not path.is_file() or (sys.platform != "win32" and not os.access(path, os.X_OK)):
-            raise ValueError(f"Executable is not runnable: {path}")
-        return str(path)
+        return _validate_runnable_executable(raw)
     if not BINARY_RE.fullmatch(raw):
         raise ValueError("Executable name contains unsupported characters")
     resolved = shutil.which(raw)
     if not resolved:
         raise ValueError(f"Executable not found in PATH: {raw}")
-    return str(Path(resolved).resolve())
+    return _validate_runnable_executable(resolved)
 
 
 def run_capture(argv: list[str], *, cwd: Path | str | None = None, timeout: int = HELP_TIMEOUT_SECONDS) -> tuple[int, str]:
     if not argv:
         raise ValueError("Empty command")
     executable = argv[0]
-    if os.path.isabs(executable) and os.getenv("PANEL_ALLOW_ABSOLUTE_BINARIES", "0") != "1":
-        raise ValueError(f"Absolute executable path rejected: {executable}")
+    if os.path.isabs(executable):
+        resolved_executable = _validate_runnable_executable(executable)
+        discovered = shutil.which(Path(executable).name)
+        discovered_resolved = _validate_runnable_executable(discovered) if discovered else ""
+        if (
+            discovered_resolved != resolved_executable
+            and os.getenv("PANEL_ALLOW_ABSOLUTE_BINARIES", "0") != "1"
+        ):
+            raise ValueError(
+                f"Absolute executable path rejected: {executable}; "
+                "it is not the active executable resolved from PATH"
+            )
+    else:
+        resolved_executable = resolve_executable(executable)
+    argv = [resolved_executable, *argv[1:]]
     env = os.environ.copy()
     env.setdefault("TERM", "dumb")
     env.setdefault("NO_COLOR", "1")
