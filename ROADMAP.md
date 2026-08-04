@@ -62,6 +62,21 @@
 - [x] Bulk job operations: bulk create, bulk stop, bulk delete
 - [x] Unified SSE event stream at GET /api/events for job state changes
 
+## v3.4 — Windows 11 Fluent Design GUI
+
+- [x] Native-feeling WinUI 3 / Fluent Design desktop client with tkinter
+- [x] Navigation sidebar with 15 pages: Dashboard, Jobs, Workflows, Templates, Presets, Analytics, Providers, Users, API Keys, Webhooks, Notifications, MCP Servers, Audit Log, Scheduler, Settings
+- [x] Dashboard with health stats, load metrics, and recent jobs
+- [x] Jobs page with create/stop/delete/retry/bulk ops, status filter, and output viewer
+- [x] CRUD dialogs for Workflows, Templates, Presets, API Keys, Webhooks, Notifications, MCP Servers, Schedules
+- [x] Provider management with circuit breaker, rate limit, and health probe views
+- [x] User management with role-based creation
+- [x] Audit log viewer with chain verification and JSON export
+- [x] Settings page with connection config, auth, and database backup/restore
+- [x] Live SSE event feed panel with auto-refresh and color-coded events
+- [x] Fluent-styled widgets: rounded buttons, card panels, status badges, combo boxes
+- [x] Segoe UI Variable / Cascadia Code fonts, Mica-like background, accent colors
+
 ## Non-goals for v2
 
 - Treating heuristic help parsing as an authoritative provider specification
