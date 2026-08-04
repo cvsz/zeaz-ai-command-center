@@ -25,14 +25,14 @@ done
 systemctl --user disable --now "${APP_NAME}.service" 2>/dev/null || true
 rm -f "${HOME}/.config/systemd/user/${APP_NAME}.service"
 systemctl --user daemon-reload 2>/dev/null || true
-rm -f "${HOME}/.local/bin/${APP_NAME}" "${HOME}/.local/bin/${APP_NAME}-gui"
+rm -f "${HOME}/.local/bin/${APP_NAME}" "${HOME}/.local/bin/${APP_NAME}-gui" "${HOME}/.local/bin/zai"
 rm -rf "${HOME}/.local/share/${APP_NAME}" "${HOME}/.local/share/${APP_NAME}".backup-*
 
 if [[ "$PURGE" == "1" ]]; then
   rm -rf "${XDG_CONFIG_HOME:-${HOME}/.config}/${APP_NAME}"
   rm -rf "${XDG_STATE_HOME:-${HOME}/.local/state}/${APP_NAME}"
-  echo "Removed ${APP_NAME}, configuration, and durable job history"
+  echo "Removed ${APP_NAME}, zai, configuration, and durable job history"
 else
-  echo "Removed ${APP_NAME}; configuration and durable job history were preserved"
+  echo "Removed ${APP_NAME} and zai; configuration and durable job history were preserved"
   echo "Run $0 --purge to remove all persisted data"
 fi
