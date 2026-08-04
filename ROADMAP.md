@@ -83,6 +83,25 @@
 - [x] Fix CodeQL command-line-injection alert: run_capture validates argv and rejects absolute paths
 - [x] Fix CodeQL weak-sensitive-data-hashing alert: password hashing migrated from SHA-256 to PBKDF2-HMAC-SHA256 with 600k iterations and per-password random salt
 
+## v3.4.2 — Lifecycle Hardening
+
+- [x] Single `version.py` release source used by runtime, packaging, installer, Makefile, Docker, and validation tests
+- [x] Automated release lifecycle validation for source install, safe in-place upgrade, uninstall/purge, wheel/sdist installation
+- [x] Console launchers for both the web command center and Windows desktop GUI in Python wheel installations
+- [x] Installer upgrades use staged replacement, unique backups, rollback on failure, and preserve external configuration/state
+
+## v3.4.3 — Deep Review & Bug Fixes
+
+- [x] Fix critical `/api/keys` UnboundLocalError caused by local `import secrets` shadowing module-level import
+- [x] Fix GitLab and Bitbucket endpoints returning HTTP 500 when CLIs not installed — now gracefully return empty lists
+- [x] Fix SSE client silently discarding `event:` lines — now captures SSE event type as `sse_type`
+- [x] Fix Dockerfile missing `gui.py` in COPY command
+- [x] Add 16 missing environment variables to `.env.example` (SMTP, PTY, sandbox, provider limits, circuit breaker, load shedder, health probes)
+- [x] Add 15 missing environment variables to README.md configuration table
+- [x] Add missing `.gitignore` patterns (`node_modules/`, `.DS_Store`, `.idea/`, `.vscode/`, `.mypy_cache/`, `.eggs/`, `*.swp`)
+- [x] Remove orphaned `local_ai_provider.json` and add to `.gitignore`
+- [x] Add 22 new tests: password hashing (7), HTTP endpoints (12), SSE event type (1), circuit breaker/health probes (2)
+
 ## Non-goals for v2
 
 - Treating heuristic help parsing as an authoritative provider specification

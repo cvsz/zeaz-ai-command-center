@@ -202,6 +202,8 @@ Events emitted: `job.created`, `job.finished` with payloads including `id`, `typ
 | `GET` | `/api/bitbucket/pulls` | List Bitbucket PRs |
 | `POST` | `/api/bitbucket/pulls` | Create a Bitbucket PR |
 
+> **Note**: `GET /api/gitlab/merges` and `GET /api/bitbucket/pulls` return an empty list (HTTP 200) instead of HTTP 500 when the corresponding CLI tools (`glab`, `bb`) are not installed.
+
 ## Self-Update
 
 | Method | Path | Description |

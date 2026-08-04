@@ -3,6 +3,23 @@
 All notable changes are documented here.
 
 
+## [3.4.3] - 2026-08-04
+
+### Fixed
+
+- **Critical: `/api/keys` endpoint crashed** with `UnboundLocalError` due to local `import secrets` in `/api/mfa/setup` shadowing the module-level import. Removed the local import.
+- **GitLab and Bitbucket merge/pull list endpoints** returned HTTP 500 when the `glab` or `bitbucket` CLIs were not installed. Now gracefully return empty lists.
+- **`gui.py` SSE client** silently discarded `event:` lines from the server. Now captures the SSE event type and attaches it as `sse_type` on data events.
+- **`Dockerfile`** was missing `gui.py` in the COPY command, so the GUI module was not available in container images.
+- **`.env.example`** was missing 16 environment variables (SMTP, PTY, sandbox, provider rate limits, circuit breaker, load shedder, health probes). Updated header from v2.1 to v3.4.2.
+- **`.gitignore`** was missing common patterns (`node_modules/`, `.DS_Store`, `.idea/`, `.vscode/`, `.mypy_cache/`, `.eggs/`, `*.swp`).
+
+### Added
+
+- 22 new tests: 7 for PBKDF2 password hashing and legacy SHA-256 migration, 12 for previously uncovered HTTP endpoints (analytics, webhooks, API keys, audit, backup/restore, SSE events, MFA, bulk operations, GitLab/Bitbucket), 1 for SSE event type tracking, 2 for circuit breaker reset and health probe enable.
+- 15 environment variables added to the README.md configuration table (PANEL_MAX_BODY_BYTES, PANEL_LOG_LEVEL, SMTP settings, provider rate limits, circuit breaker, load shedder, health probes).
+- `local_ai_provider.json` orphaned file removed and added to `.gitignore`.
+
 ## [3.4.2] - 2026-08-04
 
 ### Added

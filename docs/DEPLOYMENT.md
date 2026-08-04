@@ -53,6 +53,8 @@ docker compose up --build -d
 
 The supplied image is rootless, read-only, drops Linux capabilities, and persists state in a named volume. AI CLI binaries are not bundled. Build a derived image to install required providers, or mount carefully controlled binaries and dependencies.
 
+> **v3.4.3**: The Dockerfile `COPY` command now includes `gui.py` — previous images omitted it, causing the desktop GUI launcher to fail inside containers.
+
 ### Observability Stack
 
 Docker Compose includes optional Grafana and Prometheus services for monitoring:
@@ -67,6 +69,19 @@ Configuration files:
 - `grafana/provisioning/` — Auto-provisioned datasources and dashboards
 
 Set `GRAFANA_ADMIN_PASSWORD` in `.env` or the environment to change the default Grafana password.
+
+## Environment Variables
+
+v3.4.3 added 15 environment variables to `.env.example` that were previously undocumented. Key groups:
+
+- **SMTP**: `PANEL_SMTP_HOST`, `PANEL_SMTP_PORT`, `PANEL_SMTP_USER`, `PANEL_SMTP_PASS`, `PANEL_SMTP_FROM` — for email notification delivery
+- **PTY & Sandbox**: `PANEL_USE_PTY`, `PANEL_SANDBOX_DRIVER` — pseudo-terminal and container isolation
+- **Provider Rate Limits**: `PANEL_PROVIDER_RATE_LIMIT`, `PANEL_PROVIDER_CONCURRENCY` — per-provider RPM and concurrency caps
+- **Circuit Breaker**: `PANEL_CIRCUIT_BREAKER_THRESHOLD`, `PANEL_CIRCUIT_BREAKER_COOLDOWN` — failure threshold and recovery time
+- **Load Shedder**: `PANEL_MAX_QUEUE_DEPTH`, `PANEL_MAX_RUNNING_RATIO` — overload thresholds
+- **Health Probes**: `PANEL_HEALTH_PROBE_INTERVAL`, `PANEL_HEALTH_PROBE_FAILURES` — check frequency and auto-disable count
+
+See the full configuration table in [README.md](../README.md).
 
 ## PostgreSQL
 

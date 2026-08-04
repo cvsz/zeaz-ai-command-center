@@ -14,3 +14,12 @@ venv/
 dist/
 build/
 *.egg-info/
+node_modules/
+.DS_Store
+.idea/
+.vscode/
+.mypy_cache/
+.eggs/
+*.swp
+*.swo
+local_ai_provider.json

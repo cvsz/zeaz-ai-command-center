@@ -3,8 +3,8 @@ services:
     build:
       context: .
       args:
-        APP_VERSION: 3.4.2
-    image: zeaz-ai-command-center:3.4.2
+        APP_VERSION: 3.4.3
+    image: zeaz-ai-command-center:3.4.3
     restart: unless-stopped
     init: true
     read_only: true

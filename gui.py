@@ -130,6 +130,7 @@ class SSEClient:
         self.on_event = on_event
         self._running = False
         self._thread: threading.Thread | None = None
+        self._event_type: str | None = None
 
     def start(self):
         if self._running:
@@ -162,12 +163,16 @@ class SSEClient:
                                     event = json.loads(payload)
                                 except json.JSONDecodeError:
                                     event = {"raw": payload}
+                                if self._event_type is not None:
+                                    event["sse_type"] = self._event_type
+                                    self._event_type = None
                                 if self.on_event:
                                     self.on_event(event)
                         elif line == "":
                             buf = ""
+                            self._event_type = None
                         elif line.startswith("event:"):
-                            pass
+                            self._event_type = line[6:].strip()
             except Exception:
                 if not self._running:
                     break

@@ -2406,16 +2406,22 @@ class Handler(SimpleHTTPRequestHandler):
                 return
             if path == "/api/gitlab/merges":
                 target_cwd = validate_cwd(parse_qs(parsed.query).get("cwd", [""])[0] or None)
-                code, output = run_capture(["glab", "mr", "list", "--output", "json"], cwd=target_cwd, timeout=10)
-                try: merges = json.loads(output) if code == 0 else []
-                except Exception: merges = []
+                try:
+                    code, output = run_capture(["glab", "mr", "list", "--output", "json"], cwd=target_cwd, timeout=10)
+                    try: merges = json.loads(output) if code == 0 else []
+                    except Exception: merges = []
+                except (FileNotFoundError, ValueError):
+                    merges = []
                 self._send_json({"merges": merges})
                 return
             if path == "/api/bitbucket/pulls":
                 target_cwd = validate_cwd(parse_qs(parsed.query).get("cwd", [""])[0] or None)
-                code, output = run_capture(["bitbucket", "pullrequest", "list", "--output", "json"], cwd=target_cwd, timeout=10)
-                try: pulls = json.loads(output) if code == 0 else []
-                except Exception: pulls = []
+                try:
+                    code, output = run_capture(["bitbucket", "pullrequest", "list", "--output", "json"], cwd=target_cwd, timeout=10)
+                    try: pulls = json.loads(output) if code == 0 else []
+                    except Exception: pulls = []
+                except (FileNotFoundError, ValueError):
+                    pulls = []
                 self._send_json({"pulls": pulls})
                 return
             if path == "/api/jobs":
@@ -2611,7 +2617,6 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": code == 0, "output": out, "message": "Updated from GitHub origin/main" if code == 0 else "Update failed"})
                 return
             if path == "/api/mfa/setup":
-                import secrets
                 secret = secrets.token_hex(16).upper()
                 self.app_server.manager.store.save_mfa_secret("default_operator", secret, enabled=True)
                 self._send_json({"ok": True, "user_id": "default_operator", "secret": secret, "otpauth_url": f"otpauth://totp/ZEAZ-Command-Center:default_operator?secret={secret}&issuer=ZEAZ"})

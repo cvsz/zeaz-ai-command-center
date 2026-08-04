@@ -541,3 +541,257 @@ def test_api_templates_crud(tmp_path, monkeypatch):
         thread.join(timeout=5)
 
 
+def test_api_analytics(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    server, manager, thread = start_server(tmp_path)
+    try:
+        status, _, payload = request(server, "GET", "/api/analytics", token="test-token")
+        assert status == 200
+        data = json.loads(payload)
+        assert "total_jobs" in data
+        assert "success_rate_percent" in data
+    finally:
+        server.shutdown()
+        manager.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_api_webhooks_crud(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    server, manager, thread = start_server(tmp_path)
+    try:
+        # Create webhook
+        status, _, payload = request(server, "POST", "/api/webhooks", token="test-token", body={
+            "name": "test-webhook", "url": "https://example.com/hook",
+            "events": ["job.completed"], "secret": "whsec123",
+        })
+        assert status == 201
+        wh = json.loads(payload)
+        wh_id = wh["id"]
+
+        # List webhooks
+        status, _, payload = request(server, "GET", "/api/webhooks", token="test-token")
+        assert status == 200
+        assert "webhooks" in json.loads(payload)
+
+        # Delete webhook
+        status, _, payload = request(server, "DELETE", f"/api/webhooks/{wh_id}", token="test-token")
+        assert status == 200
+    finally:
+        server.shutdown()
+        manager.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_api_keys_crud(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    server, manager, thread = start_server(tmp_path)
+    try:
+        # Create API key
+        status, _, payload = request(server, "POST", "/api/keys", token="test-token", body={
+            "name": "test-key", "scope": "read",
+        })
+        assert status == 201
+        key = json.loads(payload)
+        key_id = key["id"]
+        assert "key" in key
+
+        # List API keys
+        status, _, payload = request(server, "GET", "/api/keys", token="test-token")
+        assert status == 200
+        assert "keys" in json.loads(payload)
+
+        # Revoke (delete) API key
+        status, _, payload = request(server, "DELETE", f"/api/keys/{key_id}", token="test-token")
+        assert status == 200
+    finally:
+        server.shutdown()
+        manager.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_api_audit_log(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    server, manager, thread = start_server(tmp_path)
+    try:
+        # Get audit log
+        status, _, payload = request(server, "GET", "/api/audit", token="test-token")
+        assert status == 200
+        data = json.loads(payload)
+        assert "entries" in data
+
+        # Verify audit chain
+        status, _, payload = request(server, "GET", "/api/audit/verify", token="test-token")
+        assert status == 200
+        data = json.loads(payload)
+        assert "valid" in data
+    finally:
+        server.shutdown()
+        manager.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_api_backup_and_restore(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    server, manager, thread = start_server(tmp_path)
+    try:
+        # Export backup
+        status, _, payload = request(server, "GET", "/api/backup", token="test-token")
+        assert status == 200
+        backup = json.loads(payload)
+        assert "schema_version" in backup
+
+        # Restore backup
+        status, _, payload = request(server, "POST", "/api/restore", token="test-token", body=backup)
+        assert status == 200
+    finally:
+        server.shutdown()
+        manager.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_api_events_sse(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    server, manager, thread = start_server(tmp_path)
+    try:
+        # SSE endpoint should return 200 with text/event-stream
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=3)
+        connection.request("GET", "/api/events", headers={
+            "Host": f"127.0.0.1:{server.server_address[1]}",
+            "Authorization": "Bearer test-token",
+        })
+        response = connection.getresponse()
+        assert response.status == 200
+        assert "text/event-stream" in response.getheader("Content-Type", "")
+        connection.close()
+    finally:
+        server.shutdown()
+        manager.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_api_circuit_breaker_reset(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    server, manager, thread = start_server(tmp_path)
+    try:
+        # Reset a non-existent provider's circuit breaker
+        status, _, payload = request(server, "POST", "/api/circuit-breaker/nonexistent/reset", token="test-token")
+        assert status == 200
+    finally:
+        server.shutdown()
+        manager.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_api_health_probes_enable(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    server, manager, thread = start_server(tmp_path)
+    try:
+        # Enable a non-existent provider's health probe
+        status, _, payload = request(server, "POST", "/api/health-probes/nonexistent/enable", token="test-token")
+        assert status == 200
+    finally:
+        server.shutdown()
+        manager.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_api_mfa_setup_and_verify(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    server, manager, thread = start_server(tmp_path)
+    try:
+        # Create a user first
+        status, _, payload = request(server, "POST", "/api/users", token="test-token", body={
+            "username": "mfauser", "password": "mfapass123", "role": "operator",
+        })
+        assert status == 201
+
+        # Setup MFA
+        status, _, payload = request(server, "POST", "/api/mfa/setup", token="test-token", body={
+            "username": "mfauser",
+        })
+        assert status == 200
+        data = json.loads(payload)
+        assert "secret" in data
+        assert "otpauth_url" in data
+    finally:
+        server.shutdown()
+        manager.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_api_job_lifecycle(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    server, manager, thread = start_server(tmp_path)
+    try:
+        # Create a job
+        status, _, payload = request(server, "POST", "/api/jobs", token="test-token", body={
+            "provider_id": "echo", "argv": ["echo", "hello"], "cwd": str(tmp_path),
+        })
+        assert status in (202, 400, 404)
+        if status == 202:
+            job = json.loads(payload)
+            job_id = job["id"]
+
+            # Get individual job
+            status, _, payload = request(server, "GET", f"/api/jobs/{job_id}", token="test-token")
+            assert status == 200
+
+            # Delete job
+            status, _, payload = request(server, "DELETE", f"/api/jobs/{job_id}", token="test-token")
+            assert status == 200
+    finally:
+        server.shutdown()
+        manager.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_api_bulk_job_operations(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    server, manager, thread = start_server(tmp_path)
+    try:
+        # Bulk stop with empty list
+        status, _, payload = request(server, "POST", "/api/jobs/bulk/stop", token="test-token", body={"ids": []})
+        assert status == 200
+
+        # Bulk delete with empty list
+        status, _, payload = request(server, "POST", "/api/jobs/bulk/delete", token="test-token", body={"ids": []})
+        assert status == 200
+    finally:
+        server.shutdown()
+        manager.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_api_gitlab_and_bitbucket(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("PANEL_ALLOW_ANY_CWD", "1")
+    server, manager, thread = start_server(tmp_path)
+    try:
+        # GitLab merges — gracefully returns empty list when glab CLI not installed
+        status, _, payload = request(server, "GET", f"/api/gitlab/merges?cwd={tmp_path}", token="test-token")
+        assert status == 200
+        assert "merges" in json.loads(payload)
+
+        # Bitbucket pulls — gracefully returns empty list when CLI not installed
+        status, _, payload = request(server, "GET", f"/api/bitbucket/pulls?cwd={tmp_path}", token="test-token")
+        assert status == 200
+        assert "pulls" in json.loads(payload)
+    finally:
+        server.shutdown()
+        manager.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+

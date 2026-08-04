@@ -58,9 +58,16 @@ AI CLI Command Center is a provider-agnostic, local-first web interface and desk
 ### Desktop GUI (v3.4)
 - **Windows 11 Fluent Design**: Native-feeling desktop client with Segoe UI Variable, Mica-like background, and accent colors.
 - **15 Navigation Pages**: Dashboard, Jobs, Workflows, Templates, Presets, Analytics, Providers, Users, API Keys, Webhooks, Notifications, MCP Servers, Audit Log, Scheduler, Settings.
-- **Live Event Feed**: Bottom panel with color-coded SSE events and auto-refresh.
+- **Live Event Feed**: Bottom panel with color-coded SSE events (including `event:` type as `sse_type`) and auto-refresh.
 - **Full CRUD**: Create/edit/delete dialogs for all resource types.
 - **Connection Management**: Configure server URL, bearer token, and backup/restore from Settings.
+
+### Bug Fixes (v3.4.3)
+- **API Keys endpoint crash**: `GET /api/keys` no longer crashes with `UnboundLocalError` caused by a local `import secrets` shadowing the module-level import.
+- **GitLab & Bitbucket graceful fallback**: Merge/pull list endpoints return empty lists instead of HTTP 500 when the required CLIs are not installed.
+- **SSE event type tracking**: The GUI SSE client now captures the `event:` line from SSE streams as `sse_type` instead of silently discarding it.
+- **Dockerfile fix**: `gui.py` is now included in the Docker `COPY` command.
+- **Configuration completeness**: `.env.example` now documents all 15 environment variables for SMTP, PTY, sandbox, provider rate limits, circuit breaker, load shedder, and health probes.
 
 ## Quick Start
 

@@ -197,7 +197,7 @@ The GUI connects to the server at `http://127.0.0.1:8765` by default. Configure 
 - **Providers**: Circuit breaker, rate limits, health probes
 - **Admin**: Users, API Keys, Webhooks, Notifications, MCP Servers, Audit Log, Scheduler
 - **Settings**: Connection config, auth, database backup/restore
-- **Live Events**: Bottom panel with real-time SSE feed, auto-refresh on active page
+- **Live Events**: Bottom panel with real-time SSE feed (with `event:` type tracking), auto-refresh on active page
 
 ## Add any AI CLI provider
 
@@ -345,8 +345,23 @@ Dangerous variables such as `LD_PRELOAD`, `BASH_ENV`, `NODE_OPTIONS`, `PYTHONPAT
 | `PANEL_USE_PTY` | `0` | Enable pseudo-terminal master-slave allocation (`1`) |
 | `PANEL_SANDBOX_DRIVER` | empty | Container sandbox wrapper driver (`bwrap`, `docker`) |
 | `PANEL_RATE_LIMIT_PER_MINUTE` | `240` | API requests per source IP |
+| `PANEL_MAX_BODY_BYTES` | `2000000` | Maximum request body size |
+| `PANEL_LOG_LEVEL` | `INFO` | Logging level |
 | `PANEL_LOG_FORMAT` | `json` | `json` or `text` |
 | `PANEL_ENABLE_HSTS` | `0` | Add HSTS behind HTTPS-only proxy |
+| `PANEL_PROVIDER_RATE_LIMIT` | empty | Per-provider rate limit (requests/min) |
+| `PANEL_PROVIDER_CONCURRENCY` | empty | Per-provider concurrency cap |
+| `PANEL_CIRCUIT_BREAKER_THRESHOLD` | `5` | Failures before circuit opens |
+| `PANEL_CIRCUIT_BREAKER_COOLDOWN` | `300` | Seconds before circuit half-opens |
+| `PANEL_MAX_QUEUE_DEPTH` | `100` | Maximum queued jobs before load shedding |
+| `PANEL_MAX_RUNNING_RATIO` | `0.8` | Running/total ratio threshold for shedding |
+| `PANEL_HEALTH_PROBE_INTERVAL` | `60` | Seconds between provider health checks |
+| `PANEL_HEALTH_PROBE_FAILURES` | `3` | Consecutive failures before auto-disable |
+| `PANEL_SMTP_HOST` | empty | SMTP server for email notifications |
+| `PANEL_SMTP_PORT` | `587` | SMTP server port |
+| `PANEL_SMTP_USER` | empty | SMTP authentication username |
+| `PANEL_SMTP_PASS` | empty | SMTP authentication password |
+| `PANEL_SMTP_FROM` | empty | Sender address for notification emails |
 
 See [.env.example](.env.example).
 

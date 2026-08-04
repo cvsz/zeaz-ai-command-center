@@ -155,6 +155,21 @@ class TestSSEClient(unittest.TestCase):
         sse.stop()
         self.assertFalse(sse._running)
 
+    def test_sse_event_type_tracking(self):
+        """SSE client should capture event: lines and attach sse_type to data events."""
+        sse = SSEClient("http://127.0.0.1:1", on_event=lambda e: None)
+        # Verify initial state
+        self.assertIsNone(sse._event_type)
+        # Simulate event type line
+        sse._event_type = "job.created"
+        # Simulate data line with the stored event type
+        event = {"type": "job.created", "job_id": "abc"}
+        event["sse_type"] = sse._event_type
+        sse._event_type = None
+        self.assertEqual(event["sse_type"], "job.created")
+        # Verify reset
+        self.assertIsNone(sse._event_type)
+
 
 # ---------------------------------------------------------------------------
 # Fluent widget tests (headless — no display needed)

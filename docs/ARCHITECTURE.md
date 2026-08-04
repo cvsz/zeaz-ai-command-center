@@ -55,7 +55,7 @@ The Windows 11 Fluent Design GUI is a standalone tkinter application that connec
 
 - **15 navigation pages**: Dashboard, Jobs, Workflows, Templates, Presets, Analytics, Providers, Users, API Keys, Webhooks, Notifications, MCP Servers, Audit Log, Scheduler, Settings
 - **APIClient**: REST client with Bearer auth, /api/v1 prefix, and X-API-Version header
-- **SSEClient**: Background thread SSE stream parser for /api/events with auto-reconnect
+- **SSEClient**: Background thread SSE stream parser for /api/events with auto-reconnect and `event:` type capture (`sse_type` field)
 - **Live event feed**: Bottom panel with color-coded events and auto-refresh on active page
 - **Fluent-styled widgets**: Rounded buttons, card panels, status badges, combo boxes, text areas
 - **Segoe UI Variable / Cascadia Code** fonts, Mica-like background, Win11 accent colors
@@ -93,6 +93,7 @@ Output is read by a dedicated reader thread so silent commands can still be time
 - **Load shedding**: Non-critical endpoints throttled when system overloaded. Low-priority jobs shed first.
 - **Retry scheduler**: Configurable backoff (linear, exponential, fixed) with max delay and max retries.
 - **Health probes**: Periodic provider health checks with automatic disable on repeated failure.
+- **Graceful degradation**: GitLab and Bitbucket merge/pull list endpoints return empty lists instead of HTTP 500 when the required CLIs are not installed.
 
 ## Security boundaries
 
