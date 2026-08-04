@@ -1,4 +1,4 @@
-"""Regression tests for provider executable discovery and trust boundaries."""
+"""Regression tests for provider discovery, root containment, and executable trust boundaries."""
 
 import os
 import stat
