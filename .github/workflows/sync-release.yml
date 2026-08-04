@@ -1,0 +1,84 @@
+name: Sync Release Metadata
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.head_ref == 'chore/lifecycle-validation-v3.4.2'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Synchronize v3.4.2 metadata
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          server = Path("server.py")
+          text = server.read_text()
+          if "from version import __version__" not in text:
+              text = text.replace(
+                  "from storage import JobStore, TERMINAL_STATES\n",
+                  "from storage import JobStore, TERMINAL_STATES\nfrom version import __version__\n",
+                  1,
+              )
+          text = text.replace('APP_VERSION = "3.3.0"', "APP_VERSION = __version__", 1)
+          text = text.replace(
+              "Version 2.1 adds durable jobs, streamed output, hardened HTTP",
+              "The current release adds durable jobs, streamed output, hardened HTTP",
+              1,
+          )
+          server.write_text(text)
+
+          openapi = Path("openapi.yaml")
+          text = openapi.read_text()
+          text = text.replace("  version: 3.4.1", "  version: 3.4.2", 1)
+          openapi.write_text(text)
+
+          changelog = Path("CHANGELOG.md")
+          text = changelog.read_text()
+          if "## [3.4.2]" not in text:
+              marker = "All notable changes are documented here.\n"
+              entry = """
+
+          ## [3.4.2] - 2026-08-04
+
+          ### Added
+
+          - Automated release lifecycle validation for source install, safe in-place upgrade, uninstall/purge, wheel/sdist installation, Compose validation, and container startup/health.
+          - Console launchers for both the web command center and Windows desktop GUI in Python wheel installations.
+          - A single `version.py` release source used by runtime, packaging, installer, Makefile, Docker, and validation tests.
+
+          ### Fixed
+
+          - Runtime version drift (`3.3.0`), Docker/Compose tag drift (`2.1.0`), and missing GUI files in installed and packaged distributions.
+          - Installer upgrades now use a staged replacement, unique backups, rollback on replacement failure, and preserve external configuration/state.
+          - Build tooling now declares and validates its `build` dependency and verifies the generated wheel in an isolated environment.
+          """
+              entry = "\n".join(line[10:] if line.startswith("          ") else line for line in entry.splitlines())
+              text = text.replace(marker, marker + entry + "\n", 1)
+              changelog.write_text(text)
+          PY
+      - name: Validate synchronized files
+        run: |
+          python3 -m py_compile server.py version.py
+          python3 -m pytest -q tests/test_release_integrity.py
+      - name: Commit synchronized metadata
+        run: |
+          if git diff --quiet; then
+            echo "Release metadata already synchronized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server.py openapi.yaml CHANGELOG.md
+          git diff --cached --check
+          git commit -m "release: synchronize v3.4.2 runtime metadata"
+          git push origin HEAD:${{ github.head_ref }}
