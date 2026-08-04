@@ -1,3 +1,5 @@
+"""Regression tests for provider executable discovery and trust boundaries."""
+
 import os
 import stat
 import sys
