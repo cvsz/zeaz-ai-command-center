@@ -30,6 +30,11 @@ def test_python_distribution_and_launchers_are_complete():
     assert 'version = {attr = "version.__version__"}' in pyproject
     for module in ("server", "help_parser", "storage", "gui", "version"):
         assert f'"{module}"' in pyproject
+    assert 'packages = ["static"]' in pyproject
+    assert 'static = ["*.html", "*.css", "*.js"]' in pyproject
+    assert (ROOT / "static" / "__init__.py").is_file()
+    for asset in ("index.html", "styles.css", "app.js"):
+        assert (ROOT / "static" / asset).is_file()
     assert 'zeaz-ai-command-center = "server:main"' in pyproject
     assert 'zeaz-ai-command-center-gui = "gui:main"' in pyproject
 
