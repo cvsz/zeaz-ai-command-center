@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zeaz-ai-command-center"
-version = "3.4.1"
+dynamic = ["version"]
 requires-python = ">=3.10"
 description = "Secure provider-agnostic web command builder generated from AI CLI help output"
 readme = "README.md"
@@ -21,8 +21,13 @@ classifiers = [
   "Topic :: Software Development :: User Interfaces",
 ]
 
+[project.scripts]
+zeaz-ai-command-center = "server:main"
+zeaz-ai-command-center-gui = "gui:main"
+
 [project.optional-dependencies]
 dev = [
+  "build>=1.2,<2",
   "pytest>=8,<10",
   "ruff>=0.8,<1",
 ]
@@ -46,4 +51,7 @@ exclude = [".git", ".venv"]
 select = ["E9", "F63", "F7", "F82"]
 
 [tool.setuptools]
-py-modules = ["server", "help_parser", "storage"]
+py-modules = ["server", "help_parser", "storage", "gui", "version"]
+
+[tool.setuptools.dynamic]
+version = {attr = "version.__version__"}

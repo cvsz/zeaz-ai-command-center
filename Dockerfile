@@ -1,6 +1,6 @@
 FROM python:3.13-slim AS runtime
 
-ARG APP_VERSION=2.1.0
+ARG APP_VERSION=3.4.2
 LABEL org.opencontainers.image.title="ZEAZ AI Command Center" \
       org.opencontainers.image.description="Provider-agnostic AI CLI command builder and execution control panel" \
       org.opencontainers.image.version="${APP_VERSION}" \
@@ -21,7 +21,7 @@ RUN groupadd --system --gid 10001 commandcenter \
     && chown -R commandcenter:commandcenter /app /data /workspace
 
 WORKDIR /app
-COPY --chown=commandcenter:commandcenter server.py help_parser.py storage.py pyproject.toml README.md CHANGELOG.md LICENSE ./
+COPY --chown=commandcenter:commandcenter server.py help_parser.py storage.py version.py pyproject.toml README.md CHANGELOG.md LICENSE ./
 COPY --chown=commandcenter:commandcenter static ./static
 COPY --chown=commandcenter:commandcenter examples ./examples
 COPY --chown=commandcenter:commandcenter docs ./docs
