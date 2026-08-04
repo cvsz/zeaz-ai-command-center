@@ -49,3 +49,16 @@ def test_python_distribution_and_launchers_are_complete():
 
     uninstaller = (ROOT / "uninstall.sh").read_text()
     assert '"${HOME}/.local/bin/zai"' in uninstaller
+
+
+def test_user_service_avoids_capability_dependent_sandboxing():
+    installer = (ROOT / "install.sh").read_text()
+    service_template = installer.split('cat > "$SERVICE_DIR/${APP_NAME}.service" <<EOF', 1)[1].split("\nEOF", 1)[0]
+
+    assert "NoNewPrivileges=true" in service_template
+    assert "UMask=0077" in service_template
+    assert "ProtectKernelTunables=true" not in service_template
+    assert "ProtectKernelModules=true" not in service_template
+    assert "ProtectControlGroups=true" not in service_template
+    assert "ProtectSystem=strict" not in service_template
+    assert 'systemctl --user reset-failed "${APP_NAME}.service"' in installer
