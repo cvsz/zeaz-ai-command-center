@@ -86,6 +86,7 @@ def test_probe_custom_provider(tmp_path, monkeypatch):
     )
     script.chmod(script.stat().st_mode | stat.S_IXUSR)
     monkeypatch.setenv("PANEL_ALLOW_ABSOLUTE_BINARIES", "1")
+    monkeypatch.setenv("PANEL_ALLOWED_ROOTS", str(tmp_path))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
     registry = ProviderRegistry()
     result = registry.probe({"executable": str(script), "help_args": "--help", "version_args": "--version"})
