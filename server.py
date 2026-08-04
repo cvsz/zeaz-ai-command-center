@@ -151,6 +151,36 @@ def safe_text(value: Any, *, max_len: int = 8192) -> str:
     return text
 
 
+def _hash_password(password: str) -> str:
+    """Hash a password with PBKDF2-HMAC-SHA256 and a random salt.
+
+    Format: ``pbkdf2:iterations$salt$hash`` — compatible with the
+    verify function and self-contained in a single string.
+    """
+    iterations = 600_000
+    salt = os.urandom(16).hex()
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("ascii"), iterations)
+    return f"pbkdf2:{iterations}${salt}${dk.hex()}"
+
+
+def _verify_password(password: str, stored_hash: str) -> bool:
+    """Verify a password against a stored hash.
+
+    Supports both legacy SHA-256 hashes (for migration) and new PBKDF2 hashes.
+    """
+    if stored_hash.startswith("pbkdf2:"):
+        try:
+            _, rest = stored_hash.split(":", 1)
+            iterations_str, salt, expected = rest.split("$")
+            iterations = int(iterations_str)
+            dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("ascii"), iterations)
+            return hmac.compare_digest(dk.hex(), expected)
+        except (ValueError, IndexError):
+            return False
+    # Legacy SHA-256 fallback for passwords created before PBKDF2 migration
+    return hmac.compare_digest(hashlib.sha256(password.encode("utf-8")).hexdigest(), stored_hash)
+
+
 def list_of_text(value: Any, *, max_items: int = 128, max_len: int = 4096) -> list[str]:
     if value is None:
         return []
@@ -190,11 +220,9 @@ def validate_cwd(raw_cwd: Any) -> Path:
     if os.getenv("PANEL_ALLOW_ANY_CWD", "0") == "1":
         return cwd
     for root in allowed_roots():
-        try:
-            cwd.relative_to(root)
+        resolved_root = Path(root).resolve()
+        if str(cwd).startswith(str(resolved_root) + os.sep) or cwd == resolved_root:
             return cwd
-        except ValueError:
-            continue
     raise ValueError("Working directory is outside allowed roots: " + ", ".join(map(str, allowed_roots())))
 
 
@@ -230,6 +258,11 @@ def resolve_executable(executable: Any) -> str:
 
 
 def run_capture(argv: list[str], *, cwd: Path | str | None = None, timeout: int = HELP_TIMEOUT_SECONDS) -> tuple[int, str]:
+    if not argv:
+        raise ValueError("Empty command")
+    executable = argv[0]
+    if os.path.isabs(executable) and os.getenv("PANEL_ALLOW_ABSOLUTE_BINARIES", "0") != "1":
+        raise ValueError(f"Absolute executable path rejected: {executable}")
     env = os.environ.copy()
     env.setdefault("TERM", "dumb")
     env.setdefault("NO_COLOR", "1")
@@ -2563,7 +2596,7 @@ class Handler(SimpleHTTPRequestHandler):
                 if not username or not password:
                     self._send_json({"error": "Username and password required"}, HTTPStatus.BAD_REQUEST)
                     return
-                pwd_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
+                pwd_hash = _hash_password(password)
                 created = self.app_server.manager.store.save_user(username, pwd_hash, role)
                 self._send_json(created, HTTPStatus.CREATED)
                 return
