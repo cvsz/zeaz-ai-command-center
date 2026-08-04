@@ -1,4 +1,4 @@
-"""Regression tests for canonical PATH-resolved provider execution."""
+"""Regression tests for canonical PATH discovery and provider execution policy."""
 
 import os
 import sys
