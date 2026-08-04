@@ -1,6 +1,6 @@
 .PHONY: run test lint check validate package clean docker-build
 
-VERSION := 3.3.0
+VERSION := 3.4.0
 
 run:
 	./start.sh
