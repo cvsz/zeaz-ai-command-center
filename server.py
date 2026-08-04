@@ -240,6 +240,22 @@ def _provider_id(value: str) -> str:
 
 
 
+
+def allowed_executable_roots() -> list[Path]:
+    """Return roots from which provider executables may be launched."""
+    roots = list(allowed_roots())
+    if sys.platform == "win32":
+        for key in ("ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA", "APPDATA"):
+            value = os.getenv(key, "").strip()
+            if value:
+                roots.append(Path(value).expanduser().resolve())
+    else:
+        roots.extend(
+            Path(value).resolve()
+            for value in ("/bin", "/sbin", "/usr/bin", "/usr/sbin", "/usr/local/bin", "/opt/homebrew/bin")
+        )
+    return list(dict.fromkeys(roots))
+
 def _validate_runnable_executable(executable: Any) -> str:
     """Return a canonical executable path after runtime safety checks.
 
@@ -248,7 +264,18 @@ def _validate_runnable_executable(executable: Any) -> str:
     path produced by ``resolve_executable`` and must not reject it a second time.
     """
     path = Path(safe_text(executable, max_len=4096)).expanduser().resolve()
-    if not path.is_absolute() or not path.exists() or not path.is_file():
+    if not path.is_absolute():
+        raise ValueError(f"Executable is not runnable: {path}")
+    for root in allowed_executable_roots():
+        resolved_root = Path(root).resolve()
+        if str(path).startswith(str(resolved_root) + os.sep) or path == resolved_root:
+            break
+    else:
+        raise ValueError(
+            "Executable is outside trusted roots: "
+            + ", ".join(map(str, allowed_executable_roots()))
+        )
+    if not path.exists() or not path.is_file():
         raise ValueError(f"Executable is not runnable: {path}")
     if sys.platform != "win32" and not os.access(path, os.X_OK):
         raise ValueError(f"Executable is not runnable: {path}")
