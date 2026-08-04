@@ -3,7 +3,36 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
-PYTHON="${PYTHON:-python3}"
+
+BASE_PYTHON="${PYTHON:-python3}"
+BUILD_VENV="${ZEAZ_BUILD_VENV:-${SCRIPT_DIR}/.venv-build}"
+
+# Debian/Ubuntu mark the system interpreter as externally managed (PEP 668).
+# Build inside a dedicated project virtualenv instead of modifying system Python.
+if [[ "${ZEAZ_BUILD_BOOTSTRAPPED:-0}" != "1" && -z "${VIRTUAL_ENV:-}" && "${ZEAZ_BUILD_SKIP_BOOTSTRAP:-0}" != "1" ]]; then
+  if [[ ! -x "${BUILD_VENV}/bin/python" ]]; then
+    echo "Preparing isolated build environment at ${BUILD_VENV}..."
+    if ! "${BASE_PYTHON}" -m venv "${BUILD_VENV}"; then
+      cat >&2 <<'EOF'
+Unable to create the build virtual environment.
+On Debian/Ubuntu install the venv support first:
+  sudo apt update
+  sudo apt install -y python3-full python3-venv
+EOF
+      exit 2
+    fi
+  fi
+
+  "${BUILD_VENV}/bin/python" -m pip install --disable-pip-version-check --upgrade pip
+  "${BUILD_VENV}/bin/python" -m pip install --disable-pip-version-check -e '.[dev]'
+
+  exec env \
+    ZEAZ_BUILD_BOOTSTRAPPED=1 \
+    PYTHON="${BUILD_VENV}/bin/python" \
+    "${BASH_SOURCE[0]}" "$@"
+fi
+
+PYTHON="${BASE_PYTHON}"
 VERSION="$(${PYTHON} -c 'from version import __version__; print(__version__)')"
 
 echo "========================================="
@@ -13,10 +42,11 @@ echo "========================================="
 ${PYTHON} - <<'PY'
 import importlib.util
 import sys
+
 missing = [name for name in ("build", "pytest") if importlib.util.find_spec(name) is None]
 if missing:
     print("Missing build dependencies: " + ", ".join(missing), file=sys.stderr)
-    print("Install them with: python3 -m pip install -e '.[dev]'", file=sys.stderr)
+    print("Activate a virtualenv and install them with: python -m pip install -e '.[dev]'", file=sys.stderr)
     raise SystemExit(2)
 PY
 
@@ -77,7 +107,23 @@ XDG_STATE_HOME="${venv_dir}/home/.local/state" \
 server_pid=$!
 
 for attempt in $(seq 1 30); do
-  if "${venv_dir}/bin/python" -c 'import sys, urllib.request; port=sys.argv[1]; health=urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=2); assert health.status == 200; page=urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=2); body=page.read(); assert page.status == 200 and b"AI CLI Command Center" in body' "$port"; then
+  if "${venv_dir}/bin/python" -c '
+import sys
+import urllib.error
+import urllib.request
+
+port = sys.argv[1]
+try:
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=2) as health:
+        if health.status != 200:
+            raise SystemExit(1)
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=2) as page:
+        body = page.read()
+        if page.status != 200 or b"AI CLI Command Center" not in body:
+            raise SystemExit(1)
+except (OSError, urllib.error.URLError):
+    raise SystemExit(1)
+' "$port" 2>/dev/null; then
     break
   fi
   if ! kill -0 "$server_pid" 2>/dev/null; then
