@@ -1054,6 +1054,7 @@ class JobManager:
         self.capacity = threading.BoundedSemaphore(MAX_CONCURRENT_JOBS)
         self.priority_queue = PriorityJobQueue(self.capacity, MAX_CONCURRENT_JOBS)
         self.shutting_down = threading.Event()
+        self.worker_threads: set[threading.Thread] = set()
         self._event_bus: list[dict[str, Any]] = []
         self._event_bus_lock = threading.Lock()
         self._event_bus_changed = threading.Condition(self._event_bus_lock)
@@ -1133,7 +1134,7 @@ class JobManager:
             self.order.appendleft(job.id)
         self._persist(job, force=True)
         self.emit_event("job.created", {"job_id": job.id, "provider_id": provider_id, "priority": priority})
-        threading.Thread(target=self._run, args=(job,), daemon=True, name=f"job-{job.id}").start()
+        self._start_worker(job, name=f"job-{job.id}")
         LOGGER.info("job_created", extra={"job_id": job.id, "provider_id": job.provider_id})
         self.store.append_audit("job_created", target_type="job", target_id=job.id, details={"provider_id": job.provider_id, "risk": risk})
         return job
@@ -1148,6 +1149,20 @@ class JobManager:
             output_base = job.output_base
             job.last_persisted_at = now
         self.store.upsert(record, output, output_base)
+
+    def _start_worker(self, job: Job, *, name: str) -> threading.Thread:
+        thread = threading.Thread(target=self._run_tracked, args=(job,), daemon=True, name=name)
+        with self.lock:
+            self.worker_threads.add(thread)
+        thread.start()
+        return thread
+
+    def _run_tracked(self, job: Job) -> None:
+        try:
+            self._run(job)
+        finally:
+            with self.lock:
+                self.worker_threads.discard(threading.current_thread())
 
     @staticmethod
     def _read_output(stream: Any, target: queue.Queue[bytes | None]) -> None:
@@ -1463,6 +1478,24 @@ class JobManager:
         for job_id in active:
             self.stop(job_id)
 
+        deadline = time.monotonic() + 15.0
+        current = threading.current_thread()
+        while time.monotonic() < deadline:
+            with self.lock:
+                workers = [thread for thread in self.worker_threads if thread is not current and thread.is_alive()]
+            if not workers:
+                break
+            for thread in workers:
+                remaining = max(0.0, deadline - time.monotonic())
+                if remaining <= 0:
+                    break
+                thread.join(timeout=min(0.25, remaining))
+
+        with self.lock:
+            jobs = list(self.jobs.values())
+        for job in jobs:
+            self._persist(job, force=True)
+
 
 class RateLimiter:
     def __init__(self, limit: int, window_seconds: int = 60) -> None:
@@ -1596,7 +1629,7 @@ class RetryScheduler:
         self.manager.store.append_audit("job_retry", target_type="job", target_id=job.id,
                                         details={"retry_count": job.retry_count, "max_retries": job.max_retries,
                                                   "backoff": job.retry_policy})
-        threading.Thread(target=self.manager._run, args=(job,), daemon=True, name=f"job-retry-{job.id}").start()
+        self.manager._start_worker(job, name=f"job-retry-{job.id}")
         LOGGER.info("job_retry_scheduled", extra={"job_id": job.id, "retry_count": job.retry_count})
 
     def pending_count(self) -> int:
