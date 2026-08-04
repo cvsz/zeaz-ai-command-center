@@ -1,0 +1,109 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "ZEAZ AI Command Center job observability dashboard",
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "title": "Jobs by Status",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "ai_cli_command_center_jobs", "legendFormat": "{{status}}" }
+      ]
+    },
+    {
+      "title": "Queue Depth",
+      "type": "gauge",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        { "expr": "ai_cli_command_center_queue_depth", "legendFormat": "queued" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 3 },
+              { "color": "red", "value": 6 }
+            ]
+          },
+          "max": 10
+        }
+      }
+    },
+    {
+      "title": "Running Jobs",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "ai_cli_command_center_running_count", "legendFormat": "running" }
+      ]
+    },
+    {
+      "title": "Average Job Latency",
+      "type": "gauge",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        { "expr": "ai_cli_command_center_avg_latency_seconds", "legendFormat": "avg" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 30 },
+              { "color": "red", "value": 120 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Jobs Over Time",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        { "expr": "ai_cli_command_center_jobs", "legendFormat": "{{status}}" }
+      ]
+    },
+    {
+      "title": "Per-Provider Job Count",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        { "expr": "ai_cli_command_center_provider_jobs", "legendFormat": "{{provider}} {{status}}" }
+      ]
+    },
+    {
+      "title": "Per-Provider Avg Latency",
+      "type": "bargauge",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        { "expr": "ai_cli_command_center_provider_avg_latency_seconds", "legendFormat": "{{provider}}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "title": "Max Concurrent Jobs",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [
+        { "expr": "ai_cli_command_center_max_concurrent_jobs", "legendFormat": "limit" }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["zeaz", "ai-command-center"],
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "ZEAZ AI Command Center",
+  "uid": "zeaz-ai-command-center"
+}

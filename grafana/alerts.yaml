@@ -1,0 +1,72 @@
+groups:
+  - name: zeaz-ai-command-center
+    rules:
+      - alert: HighJobFailureRate
+        expr: >
+          (ai_cli_command_center_jobs{status="failed"}
+          / ignoring(status) sum(ai_cli_command_center_jobs)) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High job failure rate"
+          description: >-
+            More than 50% of jobs are failing over the last 5 minutes.
+            Current value: {{ $value | printf "%.2f" }}
+
+      - alert: QueueDepthHigh
+        expr: ai_cli_command_center_queue_depth > 6
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Job queue depth is high"
+          description: >-
+            {{ $value }} jobs are queued and waiting for execution.
+            Consider increasing PANEL_MAX_CONCURRENT_JOBS.
+
+      - alert: QueueDepthCritical
+        expr: ai_cli_command_center_queue_depth > 10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Job queue depth is critical"
+          description: >-
+            {{ $value }} jobs are queued and waiting for execution.
+            The system may be overloaded.
+
+      - alert: HighJobLatency
+        expr: ai_cli_command_center_avg_latency_seconds > 120
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Average job latency is high"
+          description: >-
+            Average job execution time is {{ $value | printf "%.1f" }} seconds,
+            exceeding the 120-second threshold.
+
+      - alert: ProviderHighFailureRate
+        expr: >
+          (ai_cli_command_center_provider_jobs{status="failed"}
+          / ignoring(status) sum by(provider) (ai_cli_command_center_provider_jobs)) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Provider {{ $labels.provider }} has high failure rate"
+          description: >-
+            Provider {{ $labels.provider }} has a failure rate above 50%
+            over the last 5 minutes. Current value: {{ $value | printf "%.2f" }}
+
+      - alert: NoRunningJobs
+        expr: ai_cli_command_center_running_count == 0
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "No jobs running"
+          description: >-
+            No jobs have been running for the last 30 minutes.
+            The system may be idle or providers may be unavailable.
