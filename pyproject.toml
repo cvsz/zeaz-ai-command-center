@@ -51,7 +51,12 @@ exclude = [".git", ".venv"]
 select = ["E9", "F63", "F7", "F82"]
 
 [tool.setuptools]
+packages = ["static"]
 py-modules = ["server", "help_parser", "storage", "gui", "version"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+static = ["*.html", "*.css", "*.js"]
 
 [tool.setuptools.dynamic]
 version = {attr = "version.__version__"}
