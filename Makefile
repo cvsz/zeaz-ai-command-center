@@ -15,11 +15,11 @@ test:
 	python3 -m pytest
 
 lint:
-	@if command -v ruff >/dev/null 2>&1; then ruff check server.py help_parser.py storage.py gui.py version.py tests; else echo "ruff not installed; skipping optional lint"; fi
+	@if command -v ruff >/dev/null 2>&1; then ruff check server.py help_parser.py storage.py gui.py zai.py version.py tests; else echo "ruff not installed; skipping optional lint"; fi
 
 check:
-	python3 -m py_compile server.py help_parser.py storage.py gui.py version.py
-	python3 -m compileall -q server.py help_parser.py storage.py gui.py version.py tests
+	python3 -m py_compile server.py help_parser.py storage.py gui.py zai.py version.py
+	python3 -m compileall -q server.py help_parser.py storage.py gui.py zai.py version.py tests
 	@if command -v node >/dev/null 2>&1; then node --check static/app.js; else echo "node not installed; skipping JavaScript syntax check"; fi
 	bash -n install.sh start.sh uninstall.sh build.sh tests/lifecycle.sh
 

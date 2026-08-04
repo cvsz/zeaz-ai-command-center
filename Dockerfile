@@ -21,7 +21,7 @@ RUN groupadd --system --gid 10001 commandcenter \
     && chown -R commandcenter:commandcenter /app /data /workspace
 
 WORKDIR /app
-COPY --chown=commandcenter:commandcenter server.py help_parser.py storage.py version.py gui.py pyproject.toml README.md CHANGELOG.md LICENSE ./
+COPY --chown=commandcenter:commandcenter server.py help_parser.py storage.py version.py gui.py zai.py pyproject.toml README.md CHANGELOG.md LICENSE ./
 COPY --chown=commandcenter:commandcenter static ./static
 COPY --chown=commandcenter:commandcenter examples ./examples
 COPY --chown=commandcenter:commandcenter docs ./docs

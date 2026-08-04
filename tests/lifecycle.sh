@@ -19,8 +19,10 @@ state_dir="$XDG_STATE_HOME/ai-cli-command-center"
 ./install.sh --host=127.0.0.1 --port=18765
 [[ -x "$bin_dir/ai-cli-command-center" ]]
 [[ -x "$bin_dir/ai-cli-command-center-gui" ]]
-[[ -f "$app_dir/gui.py" && -f "$app_dir/version.py" ]]
+[[ -x "$bin_dir/zai" ]]
+[[ -f "$app_dir/gui.py" && -f "$app_dir/zai.py" && -f "$app_dir/version.py" ]]
 "$bin_dir/ai-cli-command-center" --help >/dev/null
+"$bin_dir/zai" --help >/dev/null
 
 printf '\nLIFECYCLE_SENTINEL=preserved\n' >> "$config_dir/panel.env"
 printf 'durable-state\n' > "$state_dir/sentinel"
@@ -33,11 +35,13 @@ grep -q 'durable-state' "$state_dir/sentinel"
 backup="$(find "$HOME/.local/share" -maxdepth 1 -type d -name 'ai-cli-command-center.backup-*' -print -quit)"
 [[ -n "$backup" && -f "$backup/upgrade-marker" ]]
 "$bin_dir/ai-cli-command-center" --help >/dev/null
+"$bin_dir/zai" --help >/dev/null
 
 "$app_dir/uninstall.sh"
 [[ ! -e "$app_dir" ]]
 [[ ! -e "$bin_dir/ai-cli-command-center" ]]
 [[ ! -e "$bin_dir/ai-cli-command-center-gui" ]]
+[[ ! -e "$bin_dir/zai" ]]
 [[ -f "$config_dir/panel.env" ]]
 [[ -f "$state_dir/sentinel" ]]
 
@@ -46,4 +50,4 @@ backup="$(find "$HOME/.local/share" -maxdepth 1 -type d -name 'ai-cli-command-ce
 [[ ! -e "$config_dir" ]]
 [[ ! -e "$state_dir" ]]
 
-echo "Install, upgrade, uninstall, and purge lifecycle passed."
+echo "Install, upgrade, uninstall, zai launcher, and purge lifecycle passed."

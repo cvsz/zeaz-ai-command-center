@@ -30,9 +30,9 @@ jobs:
       - name: Install validation tools
         run: python -m pip install --upgrade pip pytest ruff
       - name: Python lint
-        run: ruff check --select E9,F63,F7,F82 server.py help_parser.py storage.py tests
+        run: ruff check --select E9,F63,F7,F82 server.py help_parser.py storage.py gui.py zai.py version.py tests
       - name: Python compile
-        run: python -m py_compile server.py help_parser.py storage.py
+        run: python -m py_compile server.py help_parser.py storage.py gui.py zai.py version.py
       - name: Unit and integration tests
         run: python -m pytest
 

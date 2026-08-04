@@ -58,7 +58,7 @@ python3 -c 'import sqlite3; assert sqlite3.sqlite_version_info >= (3, 24, 0)' ||
 APP_VERSION="$(python3 -c 'from version import __version__; print(__version__)')"
 
 required_files=(
-  server.py help_parser.py storage.py gui.py version.py pyproject.toml
+  server.py help_parser.py storage.py gui.py zai.py version.py pyproject.toml
   README.md CHANGELOG.md LICENSE start.sh uninstall.sh .env.example
 )
 for path in "${required_files[@]}" static examples docs; do
@@ -80,7 +80,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-install -m 600 server.py help_parser.py storage.py gui.py version.py pyproject.toml README.md CHANGELOG.md LICENSE "$stage/"
+install -m 600 server.py help_parser.py storage.py gui.py zai.py version.py pyproject.toml README.md CHANGELOG.md LICENSE "$stage/"
 install -m 700 start.sh uninstall.sh "$stage/"
 install -m 600 .env.example "$stage/"
 cp -R static examples docs "$stage/"
@@ -108,14 +108,20 @@ cat > "$BIN_DIR/${APP_NAME}-gui" <<EOF
 set -euo pipefail
 exec python3 "$INSTALL_DIR/gui.py" "\$@"
 EOF
-chmod 700 "$BIN_DIR/${APP_NAME}" "$BIN_DIR/${APP_NAME}-gui"
+cat > "$BIN_DIR/zai" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+exec python3 "$INSTALL_DIR/zai.py" "\$@"
+EOF
+chmod 700 "$BIN_DIR/${APP_NAME}" "$BIN_DIR/${APP_NAME}-gui" "$BIN_DIR/zai"
 
 if [[ ! -f "$CONFIG_DIR/panel.env" ]]; then
   install -m 600 .env.example "$CONFIG_DIR/panel.env"
 fi
 
 printf 'Installed:  %s\n' "$INSTALL_DIR"
-printf 'Launcher:   %s\n' "$BIN_DIR/${APP_NAME}"
+printf 'Server:     %s\n' "$BIN_DIR/${APP_NAME}"
+printf 'CLI:        %s\n' "$BIN_DIR/zai"
 printf 'GUI:        %s\n' "$BIN_DIR/${APP_NAME}-gui"
 printf 'Config:     %s\n' "$CONFIG_DIR/panel.env"
 printf 'State:      %s\n' "$STATE_DIR"
@@ -163,4 +169,5 @@ EOF
 fi
 
 echo "Version:    ${APP_VERSION}"
-echo "Open:       http://${HOST}:${PORT}"
+echo "Dashboard:  zai dashboard"
+echo "Run AI:     zai \"your command\""

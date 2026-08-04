@@ -25,6 +25,7 @@ classifiers = [
 [project.scripts]
 zeaz-ai-command-center = "server:main"
 zeaz-ai-command-center-gui = "gui:main"
+zai = "zai:main"
 
 [project.optional-dependencies]
 dev = [
@@ -53,7 +54,7 @@ select = ["E9", "F63", "F7", "F82"]
 
 [tool.setuptools]
 packages = ["static"]
-py-modules = ["server", "help_parser", "storage", "gui", "version"]
+py-modules = ["server", "help_parser", "storage", "gui", "zai", "version"]
 include-package-data = true
 
 [tool.setuptools.package-data]

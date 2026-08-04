@@ -55,7 +55,7 @@ rm -rf build dist *.egg-info
 
 echo "[2/5] Validating source and test suite..."
 ${PYTHON} -m pytest
-${PYTHON} -m py_compile server.py help_parser.py storage.py gui.py version.py
+${PYTHON} -m py_compile server.py help_parser.py storage.py gui.py zai.py version.py
 
 echo "[3/5] Building wheel and source distribution..."
 ${PYTHON} -m build --wheel --sdist
@@ -76,6 +76,7 @@ trap cleanup EXIT
 ${PYTHON} -m venv "${venv_dir}"
 "${venv_dir}/bin/python" -m pip install --disable-pip-version-check --no-deps "${wheel}"
 "${venv_dir}/bin/zeaz-ai-command-center" --help >/dev/null
+"${venv_dir}/bin/zai" --help >/dev/null
 "${venv_dir}/bin/python" - <<PY
 from importlib.metadata import version
 from importlib.util import find_spec
@@ -83,6 +84,7 @@ from pathlib import Path
 
 assert version("zeaz-ai-command-center") == "${VERSION}"
 assert find_spec("gui") is not None
+assert find_spec("zai") is not None
 assert find_spec("version") is not None
 static_spec = find_spec("static")
 assert static_spec is not None and static_spec.submodule_search_locations
@@ -138,6 +140,11 @@ except (OSError, urllib.error.URLError):
   fi
   sleep 1
 done
+HOME="${venv_dir}/home" \
+XDG_CONFIG_HOME="${venv_dir}/home/.config" \
+XDG_STATE_HOME="${venv_dir}/home/.local/state" \
+  "${venv_dir}/bin/zai" dashboard --no-open --no-start --url "http://127.0.0.1:${port}" \
+  | grep -F "Dashboard: http://127.0.0.1:${port}"
 kill "$server_pid"
 wait "$server_pid" || true
 server_pid=""
