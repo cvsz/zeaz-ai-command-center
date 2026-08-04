@@ -2,7 +2,9 @@ services:
   command-center:
     build:
       context: .
-    image: zeaz-ai-command-center:2.1.0
+      args:
+        APP_VERSION: 3.4.2
+    image: zeaz-ai-command-center:3.4.2
     restart: unless-stopped
     init: true
     read_only: true
@@ -41,7 +43,7 @@ services:
       - "127.0.0.1:3000:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in your shell or .env}
       GF_AUTH_ANONYMOUS_ENABLED: "false"
     volumes:
       - ./grafana/dashboard.json:/var/lib/grafana/dashboards/zeaz-ai-command-center.json:ro

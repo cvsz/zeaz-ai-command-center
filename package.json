@@ -1,12 +1,15 @@
 {
   "name": "zeaz-ai-command-center",
-  "version": "3.4.1",
+  "version": "3.4.2",
   "description": "Secure provider-agnostic web command builder generated from AI CLI help output",
   "main": "server.py",
   "scripts": {
     "start": "python3 server.py",
     "gui": "python3 gui.py",
-    "test": "pytest"
+    "build": "./build.sh",
+    "test": "pytest",
+    "validate": "make validate",
+    "lifecycle": "make lifecycle"
   },
   "repository": {
     "type": "git",
