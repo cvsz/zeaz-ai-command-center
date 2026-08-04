@@ -290,6 +290,7 @@ Default controls:
 - CSP, frame denial, no-sniff, referrer, and permissions headers
 - Generic internal errors paired with request IDs in structured logs
 - Multi-user RBAC with API key and TOTP MFA authentication
+- PBKDF2-HMAC-SHA256 password hashing with per-user salt and 600k iterations
 - Tamper-evident audit log with SHA-256 chain verification
 
 For autonomous or untrusted workloads, run providers inside an external VM/container sandbox and use disposable workspaces.

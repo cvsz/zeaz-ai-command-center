@@ -2,6 +2,19 @@
 
 All notable changes are documented here.
 
+## [3.4.1] - 2026-08-04
+
+### Fixed
+
+- **CodeQL #2 (path-injection)**: `validate_cwd` now uses explicit `resolve()` + `startswith` check for path containment, making validation clearer to static analysis
+- **CodeQL #3 (command-line-injection)**: `run_capture` validates argv is non-empty and rejects absolute executable paths unless `PANEL_ALLOW_ABSOLUTE_BINARIES=1`
+- **CodeQL #4 (weak-sensitive-data-hashing)**: Password hashing migrated from raw SHA-256 to PBKDF2-HMAC-SHA256 with 600k iterations and per-password random salt. Legacy SHA-256 hashes still verify for migration compatibility
+
+### Changed
+
+- Password hashes stored as `pbkdf2:600000$salt$hash` format (self-contained, no schema change needed)
+- `_hash_password()` and `_verify_password()` helper functions added for secure password management
+
 ## [3.4.0] - 2026-08-04
 
 ### Added

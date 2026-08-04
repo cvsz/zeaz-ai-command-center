@@ -1,6 +1,6 @@
 {
   "name": "zeaz-ai-command-center",
-  "version": "3.4.0",
+  "version": "3.4.1",
   "description": "Secure provider-agnostic web command builder generated from AI CLI help output",
   "main": "server.py",
   "scripts": {

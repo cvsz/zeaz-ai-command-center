@@ -77,6 +77,12 @@
 - [x] Fluent-styled widgets: rounded buttons, card panels, status badges, combo boxes
 - [x] Segoe UI Variable / Cascadia Code fonts, Mica-like background, accent colors
 
+## v3.4.1 — Security Hardening
+
+- [x] Fix CodeQL path-injection alert: validate_cwd uses explicit resolve() + startswith containment check
+- [x] Fix CodeQL command-line-injection alert: run_capture validates argv and rejects absolute paths
+- [x] Fix CodeQL weak-sensitive-data-hashing alert: password hashing migrated from SHA-256 to PBKDF2-HMAC-SHA256 with 600k iterations and per-password random salt
+
 ## Non-goals for v2
 
 - Treating heuristic help parsing as an authoritative provider specification
