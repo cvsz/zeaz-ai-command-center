@@ -6,6 +6,7 @@ from pathlib import Path
 
 from server import AppServer, Handler, JobManager, ProviderRegistry, STATIC_DIR
 from storage import JobStore
+from version import __version__
 
 
 def start_server(tmp_path: Path, token: str = "test-token"):
@@ -57,7 +58,7 @@ def test_health_public_and_api_requires_bearer(tmp_path, monkeypatch):
         assert status == 401
         status, _, payload = request(server, "GET", "/api/info", token="test-token")
         assert status == 200
-        assert json.loads(payload)["version"] == "3.3.0"
+        assert json.loads(payload)["version"] == __version__
     finally:
         server.shutdown()
         manager.shutdown()
