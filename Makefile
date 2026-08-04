@@ -1,6 +1,6 @@
 .PHONY: run test lint check validate package clean docker-build
 
-VERSION := 2.1.0
+VERSION := 3.3.0
 
 run:
 	./start.sh
@@ -20,8 +20,8 @@ check:
 validate: check lint test
 
 package: clean
-	cd .. && zip -r zeaz-ai-command-center-v$(VERSION).zip zeaz-ai-command-center-v2.1 \
-		-x '*/__pycache__/*' '*/.pytest_cache/*' '*/.ruff_cache/*' '*/.git/*' '*.sqlite3*'
+	cd .. && zip -r zeaz-ai-command-center-v$(VERSION).zip zeaz-ai-command-center \
+		-x '*/__pycache__/*' '*/.pytest_cache/*' '*/.ruff_cache/*' '*/.git/*' '*.sqlite3*' '*/.venv/*' '*/.qwen/*' '*/dist/*' '*/node_modules/*'
 
 build:
 	./build.sh

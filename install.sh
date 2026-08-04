@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_NAME="ai-cli-command-center"
-APP_VERSION="2.1.0"
+APP_VERSION="3.3.0"
 INSTALL_DIR="${HOME}/.local/share/${APP_NAME}"
 BIN_DIR="${HOME}/.local/bin"
 CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/${APP_NAME}"
