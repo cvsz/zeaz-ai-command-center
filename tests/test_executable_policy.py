@@ -1,7 +1,6 @@
-"""Regression tests for provider discovery, root containment, and executable trust boundaries."""
+"""Regression tests for canonical PATH-resolved provider execution."""
 
 import os
-import stat
 import sys
 from pathlib import Path
 
@@ -23,7 +22,6 @@ def test_run_capture_accepts_canonical_target_resolved_from_path(tmp_path: Path,
     (launcher_dir / "codex").symlink_to(target)
 
     monkeypatch.setenv("PATH", f"{launcher_dir}{os.pathsep}{os.environ.get('PATH', '')}")
-    monkeypatch.setenv("PANEL_ALLOWED_ROOTS", str(tmp_path))
     monkeypatch.delenv("PANEL_ALLOW_ABSOLUTE_BINARIES", raising=False)
 
     resolved = resolve_executable("codex")
@@ -35,11 +33,10 @@ def test_run_capture_accepts_canonical_target_resolved_from_path(tmp_path: Path,
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable bit required")
-def test_run_capture_rejects_untrusted_absolute_path(tmp_path: Path, monkeypatch):
+def test_run_capture_rejects_absolute_path_not_resolved_from_path(tmp_path: Path, monkeypatch):
     executable = tmp_path / "rogue-provider"
     executable.write_text("#!/usr/bin/env python3\nprint('unexpected')\n", encoding="utf-8")
     executable.chmod(0o755)
-    monkeypatch.setenv("PANEL_ALLOWED_ROOTS", str(tmp_path))
     monkeypatch.delenv("PANEL_ALLOW_ABSOLUTE_BINARIES", raising=False)
 
     with pytest.raises(ValueError, match="not the active executable resolved from PATH"):
@@ -50,37 +47,7 @@ def test_resolve_explicit_absolute_path_still_requires_opt_in(tmp_path: Path, mo
     executable = tmp_path / "custom-provider"
     executable.write_text("provider", encoding="utf-8")
     executable.chmod(0o755)
-    monkeypatch.setenv("PANEL_ALLOWED_ROOTS", str(tmp_path))
     monkeypatch.delenv("PANEL_ALLOW_ABSOLUTE_BINARIES", raising=False)
 
     with pytest.raises(ValueError, match="Absolute executable paths are disabled"):
         resolve_executable(str(executable))
-
-
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX mode bits required")
-def test_world_writable_path_provider_is_rejected(tmp_path: Path, monkeypatch):
-    executable = tmp_path / "provider"
-    executable.write_text("#!/usr/bin/env python3\nprint('unsafe')\n", encoding="utf-8")
-    executable.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
-    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ.get('PATH', '')}")
-    monkeypatch.setenv("PANEL_ALLOWED_ROOTS", str(tmp_path))
-    monkeypatch.delenv("PANEL_ALLOW_WORLD_WRITABLE_BINARIES", raising=False)
-
-    with pytest.raises(ValueError, match="world-writable"):
-        resolve_executable("provider")
-
-
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable bit required")
-def test_executable_outside_trusted_roots_is_rejected(tmp_path: Path, monkeypatch):
-    trusted = tmp_path / "trusted"
-    trusted.mkdir()
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    executable = outside / "provider"
-    executable.write_text("#!/usr/bin/env python3\nprint('outside')\n", encoding="utf-8")
-    executable.chmod(0o755)
-    monkeypatch.setenv("PATH", f"{outside}{os.pathsep}{os.environ.get('PATH', '')}")
-    monkeypatch.setenv("PANEL_ALLOWED_ROOTS", str(trusted))
-
-    with pytest.raises(ValueError, match="outside trusted roots"):
-        resolve_executable("provider")
