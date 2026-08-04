@@ -1,6 +1,12 @@
-.PHONY: run test lint check validate build lifecycle package clean docker-build
+.PHONY: run dev-setup test lint check validate build lifecycle package clean docker-build
 
 VERSION := $(shell python3 -c 'from version import __version__; print(__version__)')
+
+dev-setup:
+	python3 -m venv .venv
+	.venv/bin/python -m pip install --disable-pip-version-check --upgrade pip
+	.venv/bin/python -m pip install --disable-pip-version-check -e '.[dev]'
+	@echo "Developer environment ready. Activate it with: source .venv/bin/activate"
 
 run:
 	./start.sh
@@ -27,7 +33,7 @@ lifecycle:
 
 package: clean
 	cd .. && zip -r zeaz-ai-command-center-v$(VERSION).zip zeaz-ai-command-center \
-		-x '*/__pycache__/*' '*/.pytest_cache/*' '*/.ruff_cache/*' '*/.git/*' '*.sqlite3*' '*/.venv/*' '*/.qwen/*' '*/dist/*' '*/node_modules/*'
+		-x '*/__pycache__/*' '*/.pytest_cache/*' '*/.ruff_cache/*' '*/.git/*' '*.sqlite3*' '*/.venv/*' '*/.venv-build/*' '*/.qwen/*' '*/dist/*' '*/node_modules/*'
 
 clean:
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
