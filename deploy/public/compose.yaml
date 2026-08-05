@@ -1,0 +1,143 @@
+name: zeaz-public
+
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${ZEAZ_VERSION:-3.4.3}
+    image: zeaz-ai-command-center:${ZEAZ_VERSION:-3.4.3}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    user: "${ZEAZ_UID:-1000}:${ZEAZ_GID:-1000}"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      HOME: /home/zeaz
+      XDG_CONFIG_HOME: /home/zeaz/.config
+      XDG_CACHE_HOME: /home/zeaz/.cache
+      XDG_STATE_HOME: /home/zeaz/.local/state
+      PATH: /providers/bin:/home/zeaz/.local/bin:/usr/local/bin:/usr/bin:/bin
+      PANEL_HOST: 0.0.0.0
+      PANEL_PORT: 8765
+      PANEL_TOKEN: ${PANEL_TOKEN:?Set PANEL_TOKEN in .env}
+      PANEL_ALLOWED_HOSTS: ${ZEAZ_DOMAIN:?Set ZEAZ_DOMAIN in .env},localhost,127.0.0.1
+      PANEL_ALLOWED_ROOTS: /workspace
+      PANEL_DATABASE_PATH: /data/jobs.sqlite3
+      PANEL_ENABLE_HSTS: "1"
+      PANEL_LOG_LEVEL: ${PANEL_LOG_LEVEL:-INFO}
+      PANEL_LOG_FORMAT: json
+      PANEL_MAX_CONCURRENT_JOBS: ${PANEL_MAX_CONCURRENT_JOBS:-2}
+      PANEL_JOB_RETENTION_DAYS: ${PANEL_JOB_RETENTION_DAYS:-30}
+      PANEL_MAX_RETAINED_JOBS: ${PANEL_MAX_RETAINED_JOBS:-500}
+      PANEL_RATE_LIMIT_PER_MINUTE: ${PANEL_RATE_LIMIT_PER_MINUTE:-120}
+    expose:
+      - "8765"
+    volumes:
+      - ./data:/data
+      - ./home:/home/zeaz
+      - ./workspace:/workspace
+      - ./providers:/providers:ro
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/healthz', timeout=3).read()
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - zeaz-public-network
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      ZEAZ_DOMAIN: ${ZEAZ_DOMAIN:?Set ZEAZ_DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - zeaz-public-caddy-data:/data
+      - zeaz-public-caddy-config:/config
+    networks:
+      - zeaz-public-network
+
+  backup:
+    image: zeaz-ai-command-center:${ZEAZ_VERSION:-3.4.3}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    user: "${ZEAZ_UID:-1000}:${ZEAZ_GID:-1000}"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      app:
+        condition: service_healthy
+    entrypoint:
+      - python3
+      - /ops/backup.py
+    environment:
+      ZEAZ_BACKUP_INTERVAL_SECONDS: ${ZEAZ_BACKUP_INTERVAL_SECONDS:-86400}
+      ZEAZ_BACKUP_RETENTION_DAYS: ${ZEAZ_BACKUP_RETENTION_DAYS:-14}
+    volumes:
+      - ./data:/data:ro
+      - ./backups:/backups
+      - ./backup.py:/ops/backup.py:ro
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    networks:
+      - zeaz-public-network
+
+  restore:
+    image: zeaz-ai-command-center:${ZEAZ_VERSION:-3.4.3}
+    profiles:
+      - tools
+    init: true
+    read_only: true
+    user: "${ZEAZ_UID:-1000}:${ZEAZ_GID:-1000}"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    entrypoint:
+      - python3
+      - /ops/restore.py
+    volumes:
+      - ./data:/data
+      - ./backups:/backups:ro
+      - ./restore.py:/ops/restore.py:ro
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    networks:
+      - zeaz-public-network
+
+networks:
+  zeaz-public-network:
+    driver: bridge
+
+volumes:
+  zeaz-public-caddy-data:
+  zeaz-public-caddy-config:

@@ -23,3 +23,10 @@ node_modules/
 *.swp
 *.swo
 local_ai_provider.json
+
+deploy/public/.env
+deploy/public/data/
+deploy/public/home/
+deploy/public/workspace/
+deploy/public/providers/
+deploy/public/backups/
