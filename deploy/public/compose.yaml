@@ -11,13 +11,17 @@ services:
     restart: unless-stopped
     init: true
     read_only: true
-    user: "10001:10001"
+    user: "${ZEAZ_UID:-1000}:${ZEAZ_GID:-1000}"
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
     environment:
-      PATH: /providers/bin:/home/commandcenter/.local/bin:/usr/local/bin:/usr/bin:/bin
+      HOME: /home/zeaz
+      XDG_CONFIG_HOME: /home/zeaz/.config
+      XDG_CACHE_HOME: /home/zeaz/.cache
+      XDG_STATE_HOME: /home/zeaz/.local/state
+      PATH: /providers/bin:/home/zeaz/.local/bin:/usr/local/bin:/usr/bin:/bin
       PANEL_HOST: 0.0.0.0
       PANEL_PORT: 8765
       PANEL_TOKEN: ${PANEL_TOKEN:?Set PANEL_TOKEN in .env}
@@ -34,7 +38,8 @@ services:
     expose:
       - "8765"
     volumes:
-      - zeaz-public-data:/data
+      - ./data:/data
+      - ./home:/home/zeaz
       - ./workspace:/workspace
       - ./providers:/providers:ro
     tmpfs:
@@ -83,7 +88,7 @@ services:
     restart: unless-stopped
     init: true
     read_only: true
-    user: "10001:10001"
+    user: "${ZEAZ_UID:-1000}:${ZEAZ_GID:-1000}"
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -98,8 +103,8 @@ services:
       ZEAZ_BACKUP_INTERVAL_SECONDS: ${ZEAZ_BACKUP_INTERVAL_SECONDS:-86400}
       ZEAZ_BACKUP_RETENTION_DAYS: ${ZEAZ_BACKUP_RETENTION_DAYS:-14}
     volumes:
-      - zeaz-public-data:/data:ro
-      - zeaz-public-backups:/backups
+      - ./data:/data:ro
+      - ./backups:/backups
       - ./backup.py:/ops/backup.py:ro
     tmpfs:
       - /tmp:size=64m,mode=1777
@@ -112,7 +117,7 @@ services:
       - tools
     init: true
     read_only: true
-    user: "10001:10001"
+    user: "${ZEAZ_UID:-1000}:${ZEAZ_GID:-1000}"
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -121,8 +126,8 @@ services:
       - python3
       - /ops/restore.py
     volumes:
-      - zeaz-public-data:/data
-      - zeaz-public-backups:/backups:ro
+      - ./data:/data
+      - ./backups:/backups:ro
       - ./restore.py:/ops/restore.py:ro
     tmpfs:
       - /tmp:size=64m,mode=1777
@@ -134,7 +139,5 @@ networks:
     driver: bridge
 
 volumes:
-  zeaz-public-data:
-  zeaz-public-backups:
   zeaz-public-caddy-data:
   zeaz-public-caddy-config:
