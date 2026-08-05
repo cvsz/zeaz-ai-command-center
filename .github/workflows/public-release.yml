@@ -62,7 +62,7 @@ jobs:
           name: zeaz-${{ env.PROFILE_VERSION }}
           path: dist/*
           if-no-files-found: error
-      - name: Create GitHub release
+      - name: Create GitHub prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -75,5 +75,5 @@ jobs:
               --target "$GITHUB_SHA" \
               --title "ZEAZ ${PROFILE_VERSION}" \
               --notes-file deploy/public/RELEASE-NOTES.md \
-              --latest=false
+              --prerelease
           fi
