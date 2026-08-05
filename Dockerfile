@@ -1,6 +1,6 @@
 FROM python:3.13-slim AS runtime
 
-ARG APP_VERSION=3.4.3
+ARG APP_VERSION=3.5.0
 LABEL org.opencontainers.image.title="ZEAZ AI Command Center" \
       org.opencontainers.image.description="Provider-agnostic AI CLI command builder and execution control panel" \
       org.opencontainers.image.version="${APP_VERSION}" \
