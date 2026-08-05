@@ -1,0 +1,325 @@
+# Standalone Global Multi-Tenant Architecture
+
+## Goal
+
+Transform ZEAZ AI Command Center from a local single-node command launcher into a globally reachable, self-hosted, multi-tenant platform without mandatory paid SaaS dependencies.
+
+"No cost" means no additional software-license or hosted-platform fee when deployed on infrastructure the operator already owns. Hardware, electricity, internet access, backups, a public IP, and an optional domain name remain operator responsibilities.
+
+## Product boundary
+
+ZEAZ is split into two trust domains:
+
+1. **Control plane** — identity, organizations, policy, scheduling, metadata, audit, UI, API, and agent coordination.
+2. **Execution plane** — tenant-owned agents that run AI CLIs and repository workflows close to tenant data.
+
+Provider credentials and repository credentials stay on the tenant agent by default. The browser and central control plane do not receive provider secrets.
+
+```text
+Global users
+   │
+   ▼
+HTTPS or WireGuard
+   │
+   ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Self-hosted ZEAZ control plane                              │
+│                                                             │
+│  Web/API ─ Auth ─ Organization context ─ Policy/RBAC        │
+│     │                 │                    │                 │
+│     ├─ Projects       ├─ PostgreSQL RLS    ├─ Audit chain   │
+│     ├─ Workflows      ├─ Job queue/outbox  ├─ Quotas        │
+│     └─ Agent console  └─ Artifact metadata └─ Notifications │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ outbound authenticated sessions
+               ┌───────────────┼────────────────┐
+               ▼               ▼                ▼
+       Tenant A agent   Tenant B agent   Tenant C agent
+       Codex/Ollama     Claude/Gemini    custom provider
+       repositories     repositories     repositories
+       local secrets    local secrets    local secrets
+```
+
+## Deployment modes
+
+### Private global mode — zero additional recurring service fee
+
+- Existing Ubuntu server hosts the control plane.
+- Users connect through WireGuard.
+- No public web application is required.
+- The operator manages WireGuard peers and access revocation.
+- A domain name is optional.
+
+### Public HTTPS mode
+
+- Existing Ubuntu server exposes ports 80/443.
+- A reverse proxy terminates TLS.
+- A domain name and reachable public IP are recommended.
+- Registration is invite-only by default.
+- Rate limits, MFA, audit logging, and account lockout are mandatory.
+
+### Hybrid mode
+
+- Public login and dashboard.
+- Agents establish outbound-only connections.
+- Administrative endpoints remain VPN-only.
+
+## Core components
+
+### 1. Control-plane API
+
+A modular service owning:
+
+- users and authentication;
+- organizations and memberships;
+- projects and repositories;
+- workflows and policy;
+- agent enrollment and status;
+- job scheduling and cancellation;
+- immutable event and audit records;
+- usage counters and quotas;
+- tenant-scoped API keys.
+
+The current local `ThreadingHTTPServer` remains the execution engine during migration. New multi-tenant HTTP surfaces must not share global mutable state with the legacy process.
+
+### 2. PostgreSQL system of record
+
+PostgreSQL replaces shared SQLite for cloud/control-plane data.
+
+Every tenant-owned row contains `organization_id`. PostgreSQL Row-Level Security is enabled for tenant tables. Each request transaction sets:
+
+```sql
+SET LOCAL app.organization_id = '<uuid>';
+SET LOCAL app.user_id = '<uuid>';
+```
+
+Policies reject rows outside the active organization even when an application query omits a tenant predicate.
+
+Platform administration uses a separate database role and explicit audited endpoints. Application roles do not receive `BYPASSRLS`.
+
+### 3. PostgreSQL-backed queue
+
+Avoid a mandatory Redis or paid queue dependency. Use PostgreSQL for:
+
+- durable job rows;
+- `FOR UPDATE SKIP LOCKED` dispatch;
+- leases with expiry;
+- idempotency keys;
+- transactional outbox events;
+- retry scheduling;
+- dead-letter state.
+
+This keeps the standalone deployment to one stateful dependency.
+
+### 4. Tenant execution agent
+
+Each agent:
+
+- enrolls with a single-use token;
+- generates its own signing key;
+- receives a scoped agent identity;
+- maintains an outbound authenticated connection;
+- advertises providers, capacity, workspace roots, and capabilities;
+- validates signed jobs and policy locally;
+- runs argv arrays with `shell=False`;
+- streams redacted output and state events;
+- rejects expired, replayed, or out-of-scope jobs;
+- stores provider credentials only on the execution host.
+
+The agent must never accept arbitrary shell strings from the control plane.
+
+### 5. Artifact storage
+
+The initial standalone implementation uses the local filesystem:
+
+```text
+var/artifacts/<organization_id>/<project_id>/<job_id>/
+```
+
+Rules:
+
+- metadata lives in PostgreSQL;
+- paths are generated by the server, never supplied directly by clients;
+- per-organization quotas are enforced;
+- downloads require organization authorization;
+- retention jobs remove expired files;
+- object storage is an optional later adapter.
+
+### 6. Web application
+
+The UI is organization-aware:
+
+- organization switcher;
+- projects and agents;
+- job queue and live logs;
+- workflow templates;
+- members and roles;
+- API keys;
+- audit records;
+- quota and usage views;
+- locale, timezone, and date-format preferences.
+
+All timestamps are stored in UTC and rendered in the user's selected timezone.
+
+## Tenant model
+
+### Organization
+
+The security and billing boundary. A user may belong to multiple organizations.
+
+### Membership roles
+
+- `owner` — organization lifecycle, security settings, and owner transfer;
+- `admin` — members, agents, projects, policies, and API keys;
+- `operator` — create/cancel jobs and operate workflows;
+- `developer` — use approved projects and inspect results;
+- `viewer` — read-only access;
+- `auditor` — audit and compliance export without job mutation.
+
+Permissions are checked in application policy and database RLS. Roles never replace resource-level project grants.
+
+### Project
+
+A tenant-scoped repository/workspace definition. Projects bind:
+
+- repository metadata;
+- allowed agents;
+- workspace roots;
+- workflow policies;
+- provider allowlists;
+- concurrency and retention quotas.
+
+### Agent
+
+An execution identity belonging to exactly one organization. Cross-organization agent sharing is prohibited in the first release.
+
+## Agent protocol
+
+### Enrollment
+
+1. Organization admin creates a short-lived, single-use enrollment token.
+2. Agent connects over TLS and submits token plus public key.
+3. Control plane consumes the token atomically.
+4. Control plane issues an agent ID and signed credential.
+5. Agent stores credentials with owner-only file permissions.
+
+### Session
+
+- outbound connection from agent to control plane;
+- heartbeat with capabilities and capacity;
+- monotonic event sequence numbers;
+- reconnect with cursor resume;
+- bounded message size;
+- credential rotation;
+- explicit server and agent protocol versions.
+
+### Job dispatch
+
+A dispatched job contains:
+
+- job and organization IDs;
+- agent and project IDs;
+- provider ID and structured argv fields;
+- workspace policy snapshot;
+- timeout and resource limits;
+- idempotency key;
+- creation and expiry timestamps;
+- control-plane signature.
+
+Agents reject organization mismatch, wrong agent ID, invalid signature, expired jobs, duplicate idempotency keys, unsupported capabilities, or policy violations.
+
+## Authentication
+
+The standalone baseline supports:
+
+- local email/username and password;
+- password hashing with a memory-hard algorithm;
+- TOTP MFA;
+- recovery codes;
+- invite links that can be transferred manually without SMTP;
+- secure, HTTP-only, same-site session cookies;
+- scoped API keys stored as hashes;
+- optional OIDC adapter later.
+
+Self-registration is disabled by default.
+
+## Security invariants
+
+1. Every tenant resource has an immutable `organization_id`.
+2. Tenant tables have RLS enabled and forced.
+3. Application database roles cannot bypass RLS.
+4. Organization context is established inside every transaction.
+5. Provider secrets remain on agents by default.
+6. Browser requests never contain provider credentials.
+7. Jobs are structured data, not shell commands.
+8. Every mutation creates an audit event.
+9. Agent jobs use signatures, expiry, and idempotency.
+10. Artifact paths are generated server-side.
+11. Platform-admin access is separate, explicit, and audited.
+12. Backups are encrypted and restoration is tested.
+
+## Availability model
+
+The zero-additional-cost release is a single-control-plane deployment:
+
+- one PostgreSQL instance;
+- one or more stateless API processes;
+- one local artifact volume;
+- any number of remote agents;
+- automated local backups.
+
+This is globally reachable but not multi-region highly available. Regional replicas, managed databases, global load balancers, and disaster-recovery sites require additional infrastructure and are outside the zero-cost target.
+
+## Scaling path
+
+### Initial
+
+- 1 control-plane instance;
+- PostgreSQL queue;
+- local artifacts;
+- 1–100 organizations;
+- outbound tenant agents.
+
+### Scale-up
+
+- multiple API replicas;
+- dedicated scheduler;
+- connection gateway replicas;
+- PostgreSQL primary plus operator-managed replica;
+- artifact storage adapter;
+- regional agent gateways.
+
+## Migration from the current application
+
+1. Preserve current local execution behavior as the first agent runtime.
+2. Extract provider discovery and job execution behind an agent interface.
+3. Add organization-aware control-plane tables and API.
+4. Route new jobs to enrolled agents.
+5. Move control-plane metadata to PostgreSQL.
+6. Keep legacy local mode for single-user/offline installations.
+
+## Non-goals for the first global release
+
+- multi-region active-active control plane;
+- centrally storing all provider credentials;
+- arbitrary shell execution;
+- automatic public registration;
+- paid billing integration;
+- strong sandboxing without container/VM isolation;
+- unlimited artifact storage;
+- cross-tenant agent sharing.
+
+## Definition of done
+
+The first standalone global multi-tenant release is complete when:
+
+- at least two organizations can operate without seeing each other's rows, events, artifacts, agents, or jobs;
+- automated isolation tests attempt cross-tenant access for every resource type;
+- a remote tenant agent enrolls and executes a structured Codex or Ollama job;
+- secrets remain on the agent;
+- jobs survive control-plane restarts;
+- duplicate dispatch is idempotent;
+- audit events identify actor, organization, resource, request, and outcome;
+- installation and upgrade work through one Docker Compose deployment;
+- backup and restore are validated;
+- the platform is usable through WireGuard without any mandatory paid service.
