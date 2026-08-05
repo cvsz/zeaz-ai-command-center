@@ -126,6 +126,14 @@ def setting_enabled(settings: dict[str, str], key: str, *, default: bool) -> boo
     return value.strip().lower() not in {"0", "false", "no", "off", "disabled"}
 
 
+def local_endpoint(base_url: str) -> tuple[str, int] | None:
+    parsed = urllib.parse.urlparse(base_url)
+    host = parsed.hostname or "127.0.0.1"
+    if parsed.scheme != "http" or host not in {"127.0.0.1", "localhost", "::1"}:
+        return None
+    return host, parsed.port or 80
+
+
 class ApiClient:
     def __init__(self, base_url: str, token: str = "", timeout: float = 10.0) -> None:
         parsed = urllib.parse.urlparse(base_url)
@@ -385,9 +393,80 @@ def systemd_user_service_available() -> bool:
     return result is not None and result.returncode == 0 and result.stdout.strip() == "loaded"
 
 
-def systemd_user_service_active() -> bool:
-    result = _systemctl_user("is-active", "--quiet", SYSTEMD_USER_UNIT)
-    return result is not None and result.returncode == 0
+def systemd_user_service_state() -> tuple[bool, int]:
+    result = _systemctl_user(
+        "show",
+        SYSTEMD_USER_UNIT,
+        "--property=ActiveState",
+        "--property=SubState",
+        "--property=MainPID",
+    )
+    if result is None or result.returncode != 0:
+        return False, 0
+    values: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        key, separator, value = line.partition("=")
+        if separator:
+            values[key] = value
+    try:
+        pid = int(values.get("MainPID", "0"))
+    except ValueError:
+        pid = 0
+    ready_state = values.get("ActiveState") == "active" and values.get("SubState") == "running"
+    return ready_state and pid > 1, pid
+
+
+def _pid_socket_inodes(pid: int) -> set[str]:
+    result: set[str] = set()
+    fd_dir = Path("/proc") / str(pid) / "fd"
+    try:
+        entries = list(fd_dir.iterdir())
+    except OSError:
+        return result
+    for entry in entries:
+        try:
+            target = os.readlink(entry)
+        except OSError:
+            continue
+        if target.startswith("socket:[") and target.endswith("]"):
+            result.add(target[8:-1])
+    return result
+
+
+def _listening_socket_inodes(port: int) -> set[str]:
+    result: set[str] = set()
+    for table_path in (Path("/proc/net/tcp"), Path("/proc/net/tcp6")):
+        try:
+            lines = table_path.read_text(encoding="utf-8").splitlines()[1:]
+        except OSError:
+            continue
+        for line in lines:
+            fields = line.split()
+            if len(fields) < 10 or fields[3] != "0A":
+                continue
+            try:
+                local_port = int(fields[1].rsplit(":", 1)[1], 16)
+            except (IndexError, ValueError):
+                continue
+            if local_port == port:
+                result.add(fields[9])
+    return result
+
+
+def pid_listens_on_port(pid: int, port: int) -> bool:
+    if pid <= 1 or not 1 <= port <= 65535:
+        return False
+    process_sockets = _pid_socket_inodes(pid)
+    return bool(process_sockets and process_sockets.intersection(_listening_socket_inodes(port)))
+
+
+def systemd_user_service_ready(client: ApiClient) -> bool:
+    endpoint = local_endpoint(client.base_url)
+    if endpoint is None:
+        return False
+    _, port = endpoint
+    active, main_pid = systemd_user_service_state()
+    return active and pid_listens_on_port(main_pid, port) and client.healthy()
 
 
 def start_systemd_user_service(client: ApiClient, wait_seconds: float = 15.0) -> None:
@@ -399,21 +478,20 @@ def start_systemd_user_service(client: ApiClient, wait_seconds: float = 15.0) ->
         raise ZaiError(f"Could not start {SYSTEMD_USER_UNIT}: {detail}")
     deadline = time.monotonic() + wait_seconds
     while time.monotonic() < deadline:
-        if systemd_user_service_active() and client.healthy():
+        if systemd_user_service_ready(client):
             return
         time.sleep(0.25)
     raise ZaiError(
-        f"{SYSTEMD_USER_UNIT} did not become ready; inspect "
+        f"{SYSTEMD_USER_UNIT} did not become ready or own the configured listener; inspect "
         f"journalctl --user -u {SYSTEMD_USER_UNIT} -n 100"
     )
 
 
 def local_server_command(base_url: str) -> tuple[list[str], dict[str, str], Path]:
-    parsed = urllib.parse.urlparse(base_url)
-    host = parsed.hostname or "127.0.0.1"
-    if parsed.scheme != "http" or host not in {"127.0.0.1", "localhost", "::1"}:
+    endpoint = local_endpoint(base_url)
+    if endpoint is None:
         raise ZaiError("Automatic startup is available only for a local HTTP dashboard")
-    port = parsed.port or 80
+    host, port = endpoint
     server_path = Path(__file__).resolve().with_name("server.py")
     if not server_path.is_file():
         raise ZaiError(f"server.py was not found beside the zai launcher: {server_path}")
@@ -470,8 +548,9 @@ def ensure_server(client: ApiClient, *, auto_start: bool) -> None:
             return
         raise ZaiError(f"Command Center is not reachable at {client.base_url}")
 
-    if systemd_user_service_available():
-        if systemd_user_service_active() and client.healthy():
+    endpoint = local_endpoint(client.base_url)
+    if endpoint is not None and systemd_user_service_available():
+        if systemd_user_service_ready(client):
             return
         stop_owned_standalone_server(client.base_url)
         start_systemd_user_service(client)
