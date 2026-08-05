@@ -55,7 +55,7 @@ def test_ensure_server_prefers_installed_systemd_service(monkeypatch):
     client = HealthClient([False])
     events = []
     monkeypatch.setattr(zai, "systemd_user_service_available", lambda: True)
-    monkeypatch.setattr(zai, "systemd_user_service_active", lambda: False)
+    monkeypatch.setattr(zai, "systemd_user_service_ready", lambda _client: False)
     monkeypatch.setattr(
         zai,
         "stop_owned_standalone_server",
