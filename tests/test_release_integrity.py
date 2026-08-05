@@ -82,7 +82,12 @@ def test_installer_retires_only_a_verified_tracked_standalone_server():
 
     assert 'stop_owned_standalone() {' in installer
     assert 'local pid_file="$STATE_DIR/zai-server.pid"' in installer
-    assert 'recorded_uid != current_uid or server_path != expected_server' in installer
+    assert 'recorded_uid = int(record.get("uid", -1))' in installer
+    assert 'recorded_start_ticks = int(record.get("start_ticks", -1))' in installer
+    assert 'recorded_start_ticks < 0' in installer
+    assert 'server_path != expected_server' in installer
+    assert 'def process_start_ticks() -> int | None:' in installer
+    assert 'process_start_ticks() != recorded_start_ticks' in installer
     assert 'proc_dir.stat().st_uid != current_uid' in installer
     assert 'server_path in argv' in installer
     assert 'argument_value(argv, "--host") == host' in installer
