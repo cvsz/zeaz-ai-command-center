@@ -30,9 +30,15 @@ jobs:
       - name: Install validation tools
         run: python -m pip install --upgrade pip pytest ruff
       - name: Python lint
-        run: ruff check --select E9,F63,F7,F82 server.py help_parser.py storage.py gui.py zai.py version.py tests
+        run: >-
+          ruff check --select E9,F63,F7,F82
+          server.py help_parser.py storage.py gui.py zai.py version.py
+          deploy/public/backup.py deploy/public/restore.py tests
       - name: Python compile
-        run: python -m py_compile server.py help_parser.py storage.py gui.py zai.py version.py
+        run: >-
+          python -m py_compile
+          server.py help_parser.py storage.py gui.py zai.py version.py
+          deploy/public/backup.py deploy/public/restore.py
       - name: Unit and integration tests
         run: python -m pytest
 
@@ -47,7 +53,10 @@ jobs:
       - name: JavaScript syntax
         run: node --check static/app.js
       - name: Bash syntax
-        run: bash -n install.sh start.sh uninstall.sh build.sh tests/lifecycle.sh
+        run: >-
+          bash -n
+          install.sh start.sh uninstall.sh build.sh tests/lifecycle.sh
+          deploy/public/install.sh deploy/public/update.sh deploy/public/restore.sh
       - name: Reject generated files
         run: |
           ! find . -path ./.git -prune -o \( -name __pycache__ -o -name .pytest_cache -o -name '*.pyc' -o -name '*.sqlite3' \) -print | grep .
