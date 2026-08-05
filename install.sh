@@ -110,13 +110,19 @@ try:
     record = json.loads(pid_file.read_text(encoding="utf-8"))
     pid = int(record["pid"])
     recorded_uid = int(record.get("uid", -1))
+    recorded_start_ticks = int(record.get("start_ticks", -1))
     server_path = str(Path(str(record["server_path"])).expanduser().resolve())
     base_url = str(record["base_url"]).rstrip("/")
 except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
     safe_unlink()
     raise SystemExit(0)
 
-if pid <= 1 or recorded_uid != current_uid or server_path != expected_server:
+if (
+    pid <= 1
+    or recorded_uid != current_uid
+    or recorded_start_ticks < 0
+    or server_path != expected_server
+):
     safe_unlink()
     raise SystemExit(0)
 
@@ -133,11 +139,25 @@ def argument_value(argv: list[str], option: str) -> str | None:
     return argv[index + 1] if index + 1 < len(argv) else None
 
 
+def process_start_ticks() -> int | None:
+    try:
+        stat_text = (Path("/proc") / str(pid) / "stat").read_text(encoding="utf-8")
+        closing_paren = stat_text.rfind(")")
+        if closing_paren < 0:
+            return None
+        fields_after_comm = stat_text[closing_paren + 2 :].split()
+        return int(fields_after_comm[19])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
 def matches() -> bool:
     try:
         os.kill(pid, 0)
         proc_dir = Path("/proc") / str(pid)
         if proc_dir.stat().st_uid != current_uid:
+            return False
+        if process_start_ticks() != recorded_start_ticks:
             return False
         argv = [
             item.decode("utf-8", errors="surrogateescape")
