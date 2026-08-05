@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -24,6 +25,8 @@ from pathlib import Path
 from typing import Any
 
 APP_NAME = "ai-cli-command-center"
+SYSTEMD_USER_UNIT = f"{APP_NAME}.service"
+STANDALONE_PID_FILENAME = "zai-server.pid"
 TERMINAL_STATES = {"succeeded", "failed", "stopped", "timed_out", "orphaned"}
 DEFAULT_PROVIDER_COMMAND_PATHS: dict[str, list[str]] = {"codex": ["exec"]}
 DEFAULT_PROVIDER_RAW_ARGS: dict[str, list[str]] = {"claude": ["--print"]}
@@ -60,6 +63,10 @@ def config_dir() -> Path:
 
 def state_dir() -> Path:
     return Path(os.getenv("XDG_STATE_HOME", Path.home() / ".local" / "state")) / APP_NAME
+
+
+def standalone_pid_path() -> Path:
+    return state_dir() / STANDALONE_PID_FILENAME
 
 
 def load_env_file(path: Path) -> dict[str, str]:
@@ -205,6 +212,182 @@ def request_with_backoff(
     raise ZaiError("Command Center rate-limit retry loop ended unexpectedly")
 
 
+def _current_uid() -> int | None:
+    return os.getuid() if hasattr(os, "getuid") else None
+
+
+def _safe_unlink(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def read_standalone_record() -> dict[str, Any] | None:
+    path = standalone_pid_path()
+    try:
+        stat_result = path.stat()
+    except FileNotFoundError:
+        return None
+    current_uid = _current_uid()
+    if current_uid is not None and stat_result.st_uid != current_uid:
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        pid = int(payload["pid"])
+        server_path = str(payload["server_path"])
+        base_url = str(payload["base_url"])
+    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+        _safe_unlink(path)
+        return None
+    if not isinstance(payload, dict) or pid <= 1 or not server_path or not base_url:
+        _safe_unlink(path)
+        return None
+    return payload
+
+
+def _argument_value(argv: list[str], option: str) -> str | None:
+    try:
+        index = argv.index(option)
+    except ValueError:
+        return None
+    return argv[index + 1] if index + 1 < len(argv) else None
+
+
+def standalone_record_matches_process(record: dict[str, Any], *, base_url: str | None = None) -> bool:
+    try:
+        pid = int(record["pid"])
+        recorded_uid = int(record.get("uid", -1))
+        server_path_raw = str(record["server_path"])
+        recorded_url = str(record["base_url"]).rstrip("/")
+    except (ValueError, TypeError, KeyError):
+        return False
+    if pid <= 1 or not server_path_raw or not recorded_url:
+        return False
+    if base_url is not None and recorded_url != base_url.rstrip("/"):
+        return False
+    current_uid = _current_uid()
+    if current_uid is not None and recorded_uid != current_uid:
+        return False
+    try:
+        os.kill(pid, 0)
+    except (ProcessLookupError, PermissionError, OSError):
+        return False
+
+    proc_dir = Path("/proc") / str(pid)
+    cmdline_path = proc_dir / "cmdline"
+    if not cmdline_path.is_file():
+        return False
+    try:
+        if current_uid is not None and proc_dir.stat().st_uid != current_uid:
+            return False
+        argv = [
+            part.decode("utf-8", errors="surrogateescape")
+            for part in cmdline_path.read_bytes().split(b"\0")
+            if part
+        ]
+    except OSError:
+        return False
+
+    server_path = str(Path(server_path_raw).expanduser().resolve())
+    if server_path not in argv:
+        return False
+    parsed = urllib.parse.urlparse(recorded_url)
+    host = parsed.hostname or "127.0.0.1"
+    port = str(parsed.port or 80)
+    return _argument_value(argv, "--host") == host and _argument_value(argv, "--port") == port
+
+
+def owned_standalone_pid(base_url: str) -> int | None:
+    record = read_standalone_record()
+    if record is None:
+        return None
+    if not standalone_record_matches_process(record, base_url=base_url):
+        _safe_unlink(standalone_pid_path())
+        return None
+    return int(record["pid"])
+
+
+def write_standalone_record(*, pid: int, server_path: Path, base_url: str) -> None:
+    directory = state_dir()
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path = standalone_pid_path()
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    payload = {
+        "pid": pid,
+        "uid": _current_uid(),
+        "server_path": str(server_path.resolve()),
+        "base_url": base_url.rstrip("/"),
+        "started_at": int(time.time()),
+    }
+    temporary.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+    os.chmod(temporary, 0o600)
+    os.replace(temporary, path)
+
+
+def stop_owned_standalone_server(base_url: str, *, timeout_seconds: float = 5.0) -> bool:
+    record = read_standalone_record()
+    if record is None:
+        return False
+    if not standalone_record_matches_process(record, base_url=base_url):
+        _safe_unlink(standalone_pid_path())
+        return False
+    pid = int(record["pid"])
+    os.kill(pid, signal.SIGTERM)
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if not standalone_record_matches_process(record, base_url=base_url):
+            break
+        time.sleep(0.1)
+    if standalone_record_matches_process(record, base_url=base_url):
+        os.kill(pid, signal.SIGKILL)
+    _safe_unlink(standalone_pid_path())
+    return True
+
+
+def _systemctl_user(*args: str) -> subprocess.CompletedProcess[str] | None:
+    try:
+        return subprocess.run(
+            ["systemctl", "--user", *args],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+
+
+def systemd_user_service_available() -> bool:
+    result = _systemctl_user("show", SYSTEMD_USER_UNIT, "--property=LoadState", "--value")
+    return result is not None and result.returncode == 0 and result.stdout.strip() == "loaded"
+
+
+def systemd_user_service_active() -> bool:
+    result = _systemctl_user("is-active", "--quiet", SYSTEMD_USER_UNIT)
+    return result is not None and result.returncode == 0
+
+
+def start_systemd_user_service(client: ApiClient, wait_seconds: float = 15.0) -> None:
+    result = _systemctl_user("start", SYSTEMD_USER_UNIT)
+    if result is None:
+        raise ZaiError("systemctl --user is unavailable; cannot start the installed service")
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or f"exit status {result.returncode}"
+        raise ZaiError(f"Could not start {SYSTEMD_USER_UNIT}: {detail}")
+    deadline = time.monotonic() + wait_seconds
+    while time.monotonic() < deadline:
+        if systemd_user_service_active() and client.healthy():
+            return
+        time.sleep(0.25)
+    raise ZaiError(
+        f"{SYSTEMD_USER_UNIT} did not become ready; inspect "
+        f"journalctl --user -u {SYSTEMD_USER_UNIT} -n 100"
+    )
+
+
 def local_server_command(base_url: str) -> tuple[list[str], dict[str, str], Path]:
     parsed = urllib.parse.urlparse(base_url)
     host = parsed.hostname or "127.0.0.1"
@@ -223,12 +406,22 @@ def local_server_command(base_url: str) -> tuple[list[str], dict[str, str], Path
 
 
 def start_local_server(client: ApiClient, wait_seconds: float = 15.0) -> None:
-    command, environment, working_directory = local_server_command(client.base_url)
+    existing_pid = owned_standalone_pid(client.base_url)
     logs = state_dir()
     logs.mkdir(parents=True, exist_ok=True, mode=0o700)
     log_path = logs / "zai-server.log"
+    if existing_pid is not None:
+        deadline = time.monotonic() + wait_seconds
+        while time.monotonic() < deadline:
+            if client.healthy():
+                return
+            time.sleep(0.25)
+        raise ZaiError(f"Tracked standalone server PID {existing_pid} did not become ready; inspect {log_path}")
+
+    command, environment, working_directory = local_server_command(client.base_url)
+    server_path = Path(command[1])
     with log_path.open("ab", buffering=0) as log_file:
-        subprocess.Popen(
+        process = subprocess.Popen(
             command,
             cwd=working_directory,
             env=environment,
@@ -238,19 +431,34 @@ def start_local_server(client: ApiClient, wait_seconds: float = 15.0) -> None:
             start_new_session=True,
             close_fds=True,
         )
+    write_standalone_record(pid=process.pid, server_path=server_path, base_url=client.base_url)
     deadline = time.monotonic() + wait_seconds
     while time.monotonic() < deadline:
         if client.healthy():
             return
+        return_code = process.poll()
+        if return_code is not None:
+            _safe_unlink(standalone_pid_path())
+            raise ZaiError(f"Dashboard exited with status {return_code}; inspect {log_path}")
         time.sleep(0.25)
     raise ZaiError(f"Dashboard did not become ready; inspect {log_path}")
 
 
 def ensure_server(client: ApiClient, *, auto_start: bool) -> None:
+    if not auto_start:
+        if client.healthy():
+            return
+        raise ZaiError(f"Command Center is not reachable at {client.base_url}")
+
+    if systemd_user_service_available():
+        if systemd_user_service_active() and client.healthy():
+            return
+        stop_owned_standalone_server(client.base_url)
+        start_systemd_user_service(client)
+        return
+
     if client.healthy():
         return
-    if not auto_start:
-        raise ZaiError(f"Command Center is not reachable at {client.base_url}")
     start_local_server(client)
 
 
