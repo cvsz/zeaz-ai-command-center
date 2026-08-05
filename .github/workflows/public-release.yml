@@ -27,8 +27,8 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-      - name: Install build toolchain
-        run: python -m pip install --upgrade pip build
+      - name: Install build and validation toolchain
+        run: python -m pip install --upgrade pip build pytest ruff
       - name: Validate release source
         run: make validate
       - name: Build wheel and source distribution
