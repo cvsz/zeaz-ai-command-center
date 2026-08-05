@@ -43,12 +43,13 @@ jobs:
           GRAFANA_ADMIN_PASSWORD: lifecycle-password
         run: docker compose config --quiet
       - name: Validate public Compose configuration
-        env:
-          ZEAZ_VERSION: 3.5.0
-          ZEAZ_DOMAIN: zeaz.example.com
-          ACME_EMAIL: ci@example.com
-          PANEL_TOKEN: lifecycle-token-with-at-least-forty-eight-characters-0001
-        run: docker compose -f deploy/public/compose.yaml config --quiet
+        run: |
+          version="$(python3 -c 'from version import __version__; print(__version__)')"
+          ZEAZ_VERSION="$version" \
+          ZEAZ_DOMAIN=zeaz.example.com \
+          ACME_EMAIL=ci@example.com \
+          PANEL_TOKEN=lifecycle-token-with-at-least-forty-eight-characters-0001 \
+            docker compose -f deploy/public/compose.yaml config --quiet
       - name: Validate Caddy configuration
         run: >-
           docker run --rm
