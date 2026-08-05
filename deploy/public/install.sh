@@ -63,7 +63,7 @@ fi
 echo "Validating deployment configuration..."
 docker compose config --quiet
 
-echo "Building ZEAZ ${ZEAZ_VERSION:-3.5.0}..."
+echo "Building ZEAZ ${ZEAZ_VERSION:-3.4.3}..."
 docker compose build --pull app
 
 echo "Starting HTTPS edge, application, and backup service..."
