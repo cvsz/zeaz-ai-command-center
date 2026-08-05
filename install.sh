@@ -141,6 +141,7 @@ After=network.target
 Type=simple
 ExecStart=/usr/bin/python3 "$INSTALL_DIR/server.py" --host "$HOST" --port "$PORT"
 WorkingDirectory=%h
+Environment=PATH=%h/.local/bin:%h/bin:/usr/local/bin:/usr/bin:/bin
 EnvironmentFile=-%h/.config/$APP_NAME/panel.env
 Environment=PYTHONUNBUFFERED=1
 Restart=on-failure
