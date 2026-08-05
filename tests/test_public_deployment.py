@@ -1,4 +1,9 @@
+import hashlib
+import importlib.util
+import sqlite3
+import sys
 from pathlib import Path
+from types import ModuleType
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -7,6 +12,20 @@ PUBLIC = ROOT / "deploy" / "public"
 
 def read(name: str) -> str:
     return (PUBLIC / name).read_text(encoding="utf-8")
+
+
+def load_module(name: str, path: Path) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def create_database(path: Path, value: str) -> None:
+    with sqlite3.connect(path) as connection:
+        connection.execute("CREATE TABLE marker (value TEXT NOT NULL)")
+        connection.execute("INSERT INTO marker(value) VALUES (?)", (value,))
 
 
 def test_public_compose_keeps_application_behind_https_edge():
@@ -76,6 +95,41 @@ def test_backup_and_restore_are_integrity_checked():
     assert 'PRAGMA integrity_check' in restore
     assert 'candidate.parent != BACKUP_ROOT' in restore
     assert 'pre-restore-' in restore
+
+
+def test_backup_and_restore_round_trip(tmp_path: Path, monkeypatch):
+    backup_module = load_module("zeaz_public_backup_test", PUBLIC / "backup.py")
+    restore_module = load_module("zeaz_public_restore_test", PUBLIC / "restore.py")
+
+    data_dir = tmp_path / "data"
+    backup_dir = tmp_path / "backups"
+    data_dir.mkdir()
+    backup_dir.mkdir()
+    database = data_dir / "jobs.sqlite3"
+    create_database(database, "before-backup")
+
+    backup_module.SOURCE = database
+    backup_module.BACKUP_DIR = backup_dir
+    backup_module.RETENTION_DAYS = 14
+    snapshot = backup_module.create_backup()
+    assert snapshot is not None and snapshot.exists()
+    checksum_path = snapshot.with_suffix(snapshot.suffix + ".sha256")
+    assert checksum_path.exists()
+    expected_checksum = hashlib.sha256(snapshot.read_bytes()).hexdigest()
+    assert checksum_path.read_text(encoding="utf-8").split()[0] == expected_checksum
+
+    database.unlink()
+    create_database(database, "current-state")
+
+    restore_module.TARGET = database
+    restore_module.BACKUP_ROOT = backup_dir.resolve()
+    monkeypatch.setattr(sys, "argv", ["restore.py", snapshot.name])
+    assert restore_module.main() == 0
+
+    with sqlite3.connect(database) as connection:
+        restored_value = connection.execute("SELECT value FROM marker").fetchone()[0]
+    assert restored_value == "before-backup"
+    assert list(data_dir.glob("jobs.sqlite3.pre-restore-*"))
 
 
 def test_public_scripts_fail_closed():
