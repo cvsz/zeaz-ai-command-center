@@ -254,10 +254,23 @@ def _argument_value(argv: list[str], option: str) -> str | None:
     return argv[index + 1] if index + 1 < len(argv) else None
 
 
+def _process_start_ticks(pid: int) -> int | None:
+    try:
+        stat_text = (Path("/proc") / str(pid) / "stat").read_text(encoding="utf-8")
+        closing_paren = stat_text.rfind(")")
+        if closing_paren < 0:
+            return None
+        fields_after_comm = stat_text[closing_paren + 2 :].split()
+        return int(fields_after_comm[19])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
 def standalone_record_matches_process(record: dict[str, Any], *, base_url: str | None = None) -> bool:
     try:
         pid = int(record["pid"])
         recorded_uid = int(record.get("uid", -1))
+        recorded_start_ticks = int(record.get("start_ticks", -1))
         server_path_raw = str(record["server_path"])
         recorded_url = str(record["base_url"]).rstrip("/")
     except (ValueError, TypeError, KeyError):
@@ -272,6 +285,8 @@ def standalone_record_matches_process(record: dict[str, Any], *, base_url: str |
     try:
         os.kill(pid, 0)
     except (ProcessLookupError, PermissionError, OSError):
+        return False
+    if recorded_start_ticks < 0 or _process_start_ticks(pid) != recorded_start_ticks:
         return False
 
     proc_dir = Path("/proc") / str(pid)
@@ -302,6 +317,8 @@ def owned_standalone_pid(base_url: str) -> int | None:
     record = read_standalone_record()
     if record is None:
         return None
+    if str(record.get("base_url", "")).rstrip("/") != base_url.rstrip("/"):
+        return None
     if not standalone_record_matches_process(record, base_url=base_url):
         _safe_unlink(standalone_pid_path())
         return None
@@ -316,6 +333,7 @@ def write_standalone_record(*, pid: int, server_path: Path, base_url: str) -> No
     payload = {
         "pid": pid,
         "uid": _current_uid(),
+        "start_ticks": _process_start_ticks(pid),
         "server_path": str(server_path.resolve()),
         "base_url": base_url.rstrip("/"),
         "started_at": int(time.time()),
@@ -328,6 +346,8 @@ def write_standalone_record(*, pid: int, server_path: Path, base_url: str) -> No
 def stop_owned_standalone_server(base_url: str, *, timeout_seconds: float = 5.0) -> bool:
     record = read_standalone_record()
     if record is None:
+        return False
+    if str(record.get("base_url", "")).rstrip("/") != base_url.rstrip("/"):
         return False
     if not standalone_record_matches_process(record, base_url=base_url):
         _safe_unlink(standalone_pid_path())
