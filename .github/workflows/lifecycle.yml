@@ -57,7 +57,7 @@ jobs:
           -e ACME_EMAIL=ci@example.com
           -v "$PWD/deploy/public/Caddyfile:/etc/caddy/Caddyfile:ro"
           caddy:2-alpine
-          validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
       - name: Build image
         run: |
           version="$(python3 -c 'from version import __version__; print(__version__)')"
