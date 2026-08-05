@@ -63,3 +63,15 @@ def test_user_service_avoids_capability_and_namespace_dependent_sandboxing():
     assert "ProtectControlGroups=true" not in service_template
     assert "ProtectSystem=strict" not in service_template
     assert 'systemctl --user reset-failed "${APP_NAME}.service"' in installer
+
+
+def test_user_service_path_includes_user_local_provider_bins_and_remains_overridable():
+    installer = (ROOT / "install.sh").read_text()
+    service_template = installer.split('cat > "$SERVICE_DIR/${APP_NAME}.service" <<EOF', 1)[1].split("\nEOF", 1)[0]
+
+    default_path = "Environment=PATH=%h/.local/bin:%h/bin:/usr/local/bin:/usr/bin:/bin"
+    environment_file = "EnvironmentFile=-%h/.config/$APP_NAME/panel.env"
+
+    assert default_path in service_template
+    assert environment_file in service_template
+    assert service_template.index(default_path) < service_template.index(environment_file)
