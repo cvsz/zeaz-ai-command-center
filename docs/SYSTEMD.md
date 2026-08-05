@@ -1,0 +1,68 @@
+# systemd User Service
+
+ZEAZ AI Command Center installs an optional `systemd --user` unit with:
+
+```bash
+./install.sh --service --host=127.0.0.1 --port=8765
+```
+
+## Provider executable PATH
+
+The generated service uses this portable default PATH:
+
+```text
+%h/.local/bin:%h/bin:/usr/local/bin:/usr/bin:/bin
+```
+
+This allows provider launchers installed under `~/.local/bin`, such as `codex`, `qwen`, or `claude`, to be discovered by the service. The default is declared before `EnvironmentFile`, so an explicit `PATH=` entry in `~/.config/ai-cli-command-center/panel.env` overrides it for custom installations.
+
+Do not enable `PANEL_ALLOW_ABSOLUTE_BINARIES` solely to work around a missing PATH entry. Provider executables should normally be resolved through PATH and then validated by the server's canonical-path and file-permission checks.
+
+## Verify the running service environment
+
+Restart the service after changing `panel.env`:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user restart ai-cli-command-center.service
+```
+
+Confirm the unit is healthy:
+
+```bash
+systemctl --user status ai-cli-command-center.service --no-pager
+curl -fsS http://127.0.0.1:8765/healthz
+```
+
+Read PATH from the actual running process:
+
+```bash
+MAINPID="$(systemctl --user show ai-cli-command-center.service --property=MainPID --value)"
+tr '\0' '\n' < "/proc/$MAINPID/environ" | sed -n 's/^PATH=/PATH=/p'
+```
+
+Verify a provider using the exact service PATH:
+
+```bash
+SERVICE_PATH="$(tr '\0' '\n' < "/proc/$MAINPID/environ" | sed -n 's/^PATH=//p')"
+env -i HOME="$HOME" PATH="$SERVICE_PATH" /bin/sh -c '
+  command -v codex
+  readlink -f "$(command -v codex)"
+  codex --version
+'
+```
+
+## Custom provider directories
+
+Add an absolute PATH to `panel.env` when providers are installed elsewhere:
+
+```bash
+PATH=/home/example/.local/bin:/home/example/custom-ai/bin:/usr/local/bin:/usr/bin:/bin
+```
+
+Then restart the service. Keep `panel.env` mode `0600` when it also contains API credentials:
+
+```bash
+chmod 600 ~/.config/ai-cli-command-center/panel.env
+systemctl --user restart ai-cli-command-center.service
+```
