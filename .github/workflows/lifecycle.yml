@@ -37,11 +37,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Validate Compose configuration
+      - name: Validate local Compose configuration
         env:
           PANEL_TOKEN: lifecycle-token
           GRAFANA_ADMIN_PASSWORD: lifecycle-password
         run: docker compose config --quiet
+      - name: Validate public Compose configuration
+        env:
+          ZEAZ_VERSION: 3.5.0
+          ZEAZ_DOMAIN: zeaz.example.com
+          ACME_EMAIL: ci@example.com
+          PANEL_TOKEN: lifecycle-token-with-at-least-forty-eight-characters-0001
+        run: docker compose -f deploy/public/compose.yaml config --quiet
+      - name: Validate Caddy configuration
+        run: >-
+          docker run --rm
+          -e ZEAZ_DOMAIN=zeaz.example.com
+          -e ACME_EMAIL=ci@example.com
+          -v "$PWD/deploy/public/Caddyfile:/etc/caddy/Caddyfile:ro"
+          caddy:2-alpine
+          caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
       - name: Build image
         run: |
           version="$(python3 -c 'from version import __version__; print(__version__)')"
