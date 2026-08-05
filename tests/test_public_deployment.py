@@ -46,7 +46,7 @@ def test_caddy_enforces_tls_proxy_and_security_headers():
 def test_public_environment_contains_no_real_secret():
     environment = read(".env.example")
 
-    assert 'ZEAZ_VERSION=3.5.0' in environment
+    assert 'ZEAZ_VERSION=3.4.3' in environment
     assert 'ai.example.com' in environment
     assert 'replace-with-at-least-48-random-bytes' in environment
     assert 'ghp_' not in environment
