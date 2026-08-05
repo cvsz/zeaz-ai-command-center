@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-import os
+import hashlib
 import sqlite3
 import sys
 import time
@@ -11,6 +11,28 @@ from pathlib import Path
 
 TARGET = Path("/data/jobs.sqlite3")
 BACKUP_ROOT = Path("/backups").resolve()
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_checksum(path: Path) -> None:
+    checksum_path = path.with_suffix(path.suffix + ".sha256")
+    if not checksum_path.exists():
+        raise RuntimeError(f"missing checksum file: {checksum_path.name}")
+    fields = checksum_path.read_text(encoding="utf-8").strip().split()
+    if len(fields) < 2 or fields[1] != path.name:
+        raise RuntimeError(f"invalid checksum manifest: {checksum_path.name}")
+    actual = sha256(path)
+    if actual != fields[0].lower():
+        raise RuntimeError(
+            f"SHA-256 mismatch for {path.name}: expected {fields[0].lower()}, got {actual}"
+        )
 
 
 def verify_database(path: Path) -> None:
@@ -38,6 +60,7 @@ def main() -> int:
         return 2
 
     source = resolve_backup(sys.argv[1])
+    verify_checksum(source)
     verify_database(source)
     TARGET.parent.mkdir(parents=True, exist_ok=True)
 
