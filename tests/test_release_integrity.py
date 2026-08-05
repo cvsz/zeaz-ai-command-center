@@ -75,3 +75,20 @@ def test_user_service_path_includes_user_local_provider_bins_and_remains_overrid
     assert default_path in service_template
     assert environment_file in service_template
     assert service_template.index(default_path) < service_template.index(environment_file)
+
+
+def test_installer_retires_only_a_verified_tracked_standalone_server():
+    installer = (ROOT / "install.sh").read_text()
+
+    assert 'stop_owned_standalone() {' in installer
+    assert 'local pid_file="$STATE_DIR/zai-server.pid"' in installer
+    assert 'recorded_uid != current_uid or server_path != expected_server' in installer
+    assert 'proc_dir.stat().st_uid != current_uid' in installer
+    assert 'server_path in argv' in installer
+    assert 'argument_value(argv, "--host") == host' in installer
+    assert 'argument_value(argv, "--port") == port' in installer
+    assert 'os.kill(pid, signal.SIGTERM)' in installer
+    assert 'os.kill(pid, signal.SIGKILL)' in installer
+    assert installer.index("stop_owned_standalone\n") < installer.index(
+        'cat > "$SERVICE_DIR/${APP_NAME}.service" <<EOF'
+    )
