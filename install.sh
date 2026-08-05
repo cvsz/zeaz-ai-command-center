@@ -80,6 +80,114 @@ cleanup() {
 }
 trap cleanup EXIT
 
+stop_owned_standalone() {
+  local pid_file="$STATE_DIR/zai-server.pid"
+  [[ -f "$pid_file" ]] || return 0
+  python3 - "$pid_file" "$INSTALL_DIR/server.py" <<'PY'
+import json
+import os
+import signal
+import sys
+import time
+from pathlib import Path
+from urllib.parse import urlparse
+
+pid_file = Path(sys.argv[1])
+expected_server = str(Path(sys.argv[2]).resolve())
+current_uid = os.getuid()
+
+
+def safe_unlink() -> None:
+    try:
+        pid_file.unlink()
+    except FileNotFoundError:
+        pass
+
+
+try:
+    if pid_file.stat().st_uid != current_uid:
+        raise SystemExit(0)
+    record = json.loads(pid_file.read_text(encoding="utf-8"))
+    pid = int(record["pid"])
+    recorded_uid = int(record.get("uid", -1))
+    recorded_start_ticks = int(record.get("start_ticks", -1))
+    server_path = str(Path(str(record["server_path"])).expanduser().resolve())
+    base_url = str(record["base_url"]).rstrip("/")
+except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+    safe_unlink()
+    raise SystemExit(0)
+
+if (
+    pid <= 1
+    or recorded_uid != current_uid
+    or recorded_start_ticks < 0
+    or server_path != expected_server
+):
+    safe_unlink()
+    raise SystemExit(0)
+
+parsed = urlparse(base_url)
+host = parsed.hostname or "127.0.0.1"
+port = str(parsed.port or 80)
+
+
+def argument_value(argv: list[str], option: str) -> str | None:
+    try:
+        index = argv.index(option)
+    except ValueError:
+        return None
+    return argv[index + 1] if index + 1 < len(argv) else None
+
+
+def process_start_ticks() -> int | None:
+    try:
+        stat_text = (Path("/proc") / str(pid) / "stat").read_text(encoding="utf-8")
+        closing_paren = stat_text.rfind(")")
+        if closing_paren < 0:
+            return None
+        fields_after_comm = stat_text[closing_paren + 2 :].split()
+        return int(fields_after_comm[19])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def matches() -> bool:
+    try:
+        os.kill(pid, 0)
+        proc_dir = Path("/proc") / str(pid)
+        if proc_dir.stat().st_uid != current_uid:
+            return False
+        if process_start_ticks() != recorded_start_ticks:
+            return False
+        argv = [
+            item.decode("utf-8", errors="surrogateescape")
+            for item in (proc_dir / "cmdline").read_bytes().split(b"\0")
+            if item
+        ]
+    except (OSError, ProcessLookupError, PermissionError):
+        return False
+    return (
+        server_path in argv
+        and argument_value(argv, "--host") == host
+        and argument_value(argv, "--port") == port
+    )
+
+
+if not matches():
+    safe_unlink()
+    raise SystemExit(0)
+
+os.kill(pid, signal.SIGTERM)
+deadline = time.monotonic() + 5.0
+while time.monotonic() < deadline and matches():
+    time.sleep(0.1)
+if matches():
+    os.kill(pid, signal.SIGKILL)
+safe_unlink()
+print(f"Stopped tracked standalone server PID {pid}")
+PY
+}
+
 install -m 600 server.py help_parser.py storage.py gui.py zai.py version.py pyproject.toml README.md CHANGELOG.md LICENSE "$stage/"
 install -m 700 start.sh uninstall.sh "$stage/"
 install -m 600 .env.example "$stage/"
@@ -131,6 +239,7 @@ if [[ "$INSTALL_SERVICE" == "1" ]]; then
   command -v systemctl >/dev/null || { echo "systemctl is required for --service" >&2; exit 1; }
   mkdir -p "$SERVICE_DIR"
   systemctl --user stop "${APP_NAME}.service" 2>/dev/null || true
+  stop_owned_standalone
   cat > "$SERVICE_DIR/${APP_NAME}.service" <<EOF
 [Unit]
 Description=AI CLI Command Center ${APP_VERSION}
