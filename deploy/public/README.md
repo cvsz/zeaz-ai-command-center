@@ -4,7 +4,7 @@ This deployment publishes one ZEAZ AI Command Center instance through automatic 
 
 ## Included
 
-- ZEAZ AI Command Center 3.5.0;
+- ZEAZ AI Command Center 3.4.3;
 - Caddy reverse proxy with automatic ACME TLS;
 - HTTP/1.1, HTTP/2, and HTTP/3 edge support;
 - loopback-free container networking without exposing the application port;
