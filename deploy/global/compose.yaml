@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: zeaz-global-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${ZEAZ_DB_NAME:-zeaz}
+      POSTGRES_USER: ${ZEAZ_DB_ADMIN_USER:-zeaz_admin}
+      POSTGRES_PASSWORD: ${ZEAZ_DB_ADMIN_PASSWORD:?Set ZEAZ_DB_ADMIN_PASSWORD in .env}
+      TZ: UTC
+    ports:
+      - "127.0.0.1:${ZEAZ_DB_PORT:-55432}:5432"
+    volumes:
+      - zeaz-global-postgres-data:/var/lib/postgresql/data
+      - ./postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    shm_size: 256mb
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    networks:
+      - zeaz-global-internal
+
+networks:
+  zeaz-global-internal:
+    driver: bridge
+    internal: true
+
+volumes:
+  zeaz-global-postgres-data:
