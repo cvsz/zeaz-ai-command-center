@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,17 @@ class FakeClient:
         return response
 
 
+class HealthClient:
+    def __init__(self, values):
+        self.base_url = "http://127.0.0.1:8765"
+        self.values = list(values)
+
+    def healthy(self):
+        if len(self.values) > 1:
+            return self.values.pop(0)
+        return self.values[0]
+
+
 def test_load_env_file_without_executing_shell(tmp_path: Path):
     path = tmp_path / "panel.env"
     path.write_text(
@@ -37,6 +49,127 @@ def test_load_env_file_without_executing_shell(tmp_path: Path):
 def test_default_url_uses_localhost_for_wildcard_bind():
     assert zai.default_url({"PANEL_HOST": "0.0.0.0", "PANEL_PORT": "9000"}) == "http://127.0.0.1:9000"
     assert zai.default_url({"ZAI_URL": "https://panel.example/"}) == "https://panel.example"
+
+
+def test_ensure_server_prefers_installed_systemd_service(monkeypatch):
+    client = HealthClient([False])
+    events = []
+    monkeypatch.setattr(zai, "systemd_user_service_available", lambda: True)
+    monkeypatch.setattr(zai, "systemd_user_service_active", lambda: False)
+    monkeypatch.setattr(
+        zai,
+        "stop_owned_standalone_server",
+        lambda url: events.append(("stop", url)) or False,
+    )
+    monkeypatch.setattr(
+        zai,
+        "start_systemd_user_service",
+        lambda value: events.append(("systemd", value.base_url)),
+    )
+    monkeypatch.setattr(
+        zai,
+        "start_local_server",
+        lambda _client: pytest.fail("must not spawn standalone when a user unit is installed"),
+    )
+
+    zai.ensure_server(client, auto_start=True)
+
+    assert events == [("stop", client.base_url), ("systemd", client.base_url)]
+
+
+def test_ensure_server_falls_back_to_standalone_without_user_unit(monkeypatch):
+    client = HealthClient([False])
+    started = []
+    monkeypatch.setattr(zai, "systemd_user_service_available", lambda: False)
+    monkeypatch.setattr(zai, "start_local_server", lambda value: started.append(value.base_url))
+
+    zai.ensure_server(client, auto_start=True)
+
+    assert started == [client.base_url]
+
+
+def test_no_start_uses_existing_server_without_systemd_probe(monkeypatch):
+    client = HealthClient([True])
+    monkeypatch.setattr(
+        zai,
+        "systemd_user_service_available",
+        lambda: pytest.fail("--no-start must not start or probe a service"),
+    )
+
+    zai.ensure_server(client, auto_start=False)
+
+
+def test_stale_standalone_pid_record_is_removed(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(zai, "state_dir", lambda: tmp_path)
+    path = zai.standalone_pid_path()
+    path.write_text(
+        json.dumps(
+            {
+                "pid": 99999999,
+                "uid": zai._current_uid(),
+                "server_path": "/tmp/server.py",
+                "base_url": "http://127.0.0.1:8765",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert zai.owned_standalone_pid("http://127.0.0.1:8765") is None
+    assert not path.exists()
+
+
+def test_unrelated_process_is_never_terminated(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(zai, "state_dir", lambda: tmp_path)
+    path = zai.standalone_pid_path()
+    path.write_text(
+        json.dumps(
+            {
+                "pid": os.getpid(),
+                "uid": zai._current_uid(),
+                "server_path": "/tmp/not-this-process-server.py",
+                "base_url": "http://127.0.0.1:8765",
+            }
+        ),
+        encoding="utf-8",
+    )
+    signals = []
+    monkeypatch.setattr(zai.os, "kill", lambda pid, sig: signals.append((pid, sig)))
+
+    assert zai.stop_owned_standalone_server("http://127.0.0.1:8765") is False
+
+    assert signals == [(os.getpid(), 0)]
+    assert not path.exists()
+
+
+def test_start_local_server_tracks_spawned_pid(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(zai, "state_dir", lambda: tmp_path)
+    monkeypatch.setattr(zai, "owned_standalone_pid", lambda _url: None)
+    server_path = tmp_path / "server.py"
+    server_path.write_text("# server\n", encoding="utf-8")
+    monkeypatch.setattr(
+        zai,
+        "local_server_command",
+        lambda _url: (
+            ["python3", str(server_path), "--host", "127.0.0.1", "--port", "8765"],
+            {},
+            tmp_path,
+        ),
+    )
+
+    class Process:
+        pid = 4242
+
+        def poll(self):
+            return None
+
+    monkeypatch.setattr(zai.subprocess, "Popen", lambda *args, **kwargs: Process())
+    client = HealthClient([True])
+
+    zai.start_local_server(client, wait_seconds=0.1)
+
+    record = json.loads(zai.standalone_pid_path().read_text(encoding="utf-8"))
+    assert record["pid"] == 4242
+    assert record["server_path"] == str(server_path.resolve())
 
 
 def test_codex_payload_uses_exec_and_current_workspace(tmp_path: Path):
