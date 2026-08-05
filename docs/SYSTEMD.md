@@ -20,7 +20,7 @@ Detached standalone startup is used only when no usable user unit exists. A stan
 ~/.local/state/ai-cli-command-center/zai-server.pid
 ```
 
-The record contains the PID, user ID, resolved `server.py` path, endpoint, and start time. Before stopping a tracked process, both `zai` and the installer verify the current process owner, exact server path, host, and port from `/proc/<pid>/cmdline`. A stale or mismatched record is removed without terminating the process.
+The record contains the PID, user ID, Linux process start-time token, resolved `server.py` path, endpoint, and wall-clock creation time. Before stopping a tracked process, both `zai` and the installer verify the current process owner, process start-time token, exact server path, host, and port from `/proc/<pid>`. The start-time token prevents a recycled PID from being mistaken for the original server process. A stale or mismatched record is removed without terminating the process.
 
 During a service installation or upgrade, the installer stops only a matching tracked standalone process before enabling systemd. An unrelated listener on the configured port is never terminated automatically; service startup fails visibly instead.
 
