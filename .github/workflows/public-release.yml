@@ -57,7 +57,7 @@ jobs:
           echo "PROFILE_VERSION=$profile_version" >> "$GITHUB_ENV"
           echo "RELEASE_TAG=v$profile_version" >> "$GITHUB_ENV"
       - name: Upload workflow artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: zeaz-${{ env.PROFILE_VERSION }}
           path: dist/*
